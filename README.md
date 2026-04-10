@@ -79,7 +79,73 @@ hackx/
 - **Frontend (`guardian-app/src/screens/ReportScreen.jsx` & `services/civicApi.js`)**: Provides an intuitive UI using the device camera for dropping pins on non-functioning lights or harassment zones, along with a dashboard feed to upvote nearby reports.
 
 ## 🚀 Quick Start
-*(Implementation pending - see `roadmap.md` Phase 1)*
+
+Here are the step-by-step instructions to initialize and run the **Project Guardian** environment locally.
+
+### 1. Backend Setup (Node.js/Express)
+The backend handles our safety-first routing engine, MongoDB database connections, and the civic "Municipal Loop".
+
+1. **Navigate to the Backend Directory:**
+   ```bash
+   cd backend
+   ```
+2. **Initialize and Install Dependencies:**
+   ```bash
+   npm init -y
+   npm install express mongoose cors dotenv nodemailer
+   ```
+3. **Environment Setup:** 
+   Create a `.env` file in the `backend` directory:
+   ```env
+   PORT=5000
+   MONGO_URI=your_mongodb_atlas_connection_string
+   MAPBOX_API_KEY=your_mapbox_secret_token
+   # For Municipal Loop emails (e.g., SendGrid/Nodemailer)
+   EMAIL_USER=your_email@gmail.com
+   EMAIL_PASS=your_app_password
+   ```
+4. **Run the Server:**
+   ```bash
+   node src/app.js
+   # Or install and run with nodemon for hot-reloading: npx nodemon src/app.js
+   ```
+
+### 2. Frontend Setup (Expo / React Native)
+The mobile frontend leverages Mapbox mapping tools and NativeWind for dark/neon themes.
+
+1. **Navigate to the App Directory:**
+   ```bash
+   cd guardian-app
+   ```
+2. **Initialize Expo Project:** *(If not already initialized)*
+   ```bash
+   # Note: this will build into the current empty directory structure we created
+   npx create-expo-app@latest . --template blank
+   ```
+3. **Install Dependencies:**
+   ```bash
+   # Core requirements for the Guardian App
+   npm install @react-navigation/native @react-navigation/native-stack @rneui/themed
+   npm install react-native-screens react-native-safe-area-context
+   # Mapbox implementation
+   npm install @rnmapbox/maps
+   # Nativewind for Tailwind styling
+   npm install nativewind
+   npm install --save-dev tailwindcss
+   npx tailwindcss init
+   ```
+4. **Start the Expo Server:**
+   ```bash
+   npx expo start
+   ```
+   *Press `a` to open in Android Emulator, `i` to open in iOS Simulator, or scan the QR code with the Expo Go app on your physical device.*
+
+### 3. Essential Next Steps (Mapbox Configuration)
+To get the custom map styles and safely overlay routes working:
+- Ensure you follow the Mapbox React Native installation instructions for adding your Mapbox Secret download token to your `build.gradle` (Android) and `.netrc` (iOS).
+
+---
+*Built during HackX Hackathon*
 
 ## 💡 The "Safety-First" Approach
 We believe navigation should adapt to human realities. By crowdsourcing threat reports, automating municipal accountability, and integrating with discrete hardware (The Guardian Bracelet), we are building a proactive safety ecosystem, not just a reactive panic button.
