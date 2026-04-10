@@ -1,29 +1,42 @@
 # Project Guardian: Hackathon Execution Plan
 
-## Immediate Action Items
+## Architecture: Single Expo App with Local SQLite
 
-### 1. Scaffolding the App
-- [ ] Initialize a new Expo / React Native project (`npx create-expo-app guardian-app`).
-- [ ] Initialize frontend routing (React Navigation).
-- [ ] Initialize a backend Node.js repository (`mkdir backend`, `npm init -y`, `npm i express mongoose cors dotenv`).
+### Phase 1: Scaffolding (COMPLETE)
+- [x] Initialize Expo project with NativeWind, React Navigation, expo-sqlite
+- [x] Set up dark/neon theme (colors.js, tailwind.config.js)
+- [x] Create SQLite schema (reports, safe_zones, emergency_logs)
+- [x] Write seed.js with 10 Ahmedabad threat reports + 10 safe zones
+- [x] Set up Stack + Tab navigation
 
-### 2. Map Implementation
-- [ ] Acquire LeafletJS/OSM API routing keys.
-- [ ] Create a core `MapScreen` component in the app.
-- [ ] Implement the LeafletJS viewport and handle user geolocation permissions.
+### Phase 2: Core Map (COMPLETE)
+- [x] Build cross-platform LeafletMap component (WebView mobile, iframe web)
+- [x] Implement CARTO dark basemap tiles
+- [x] Render threat zones as red pulsing circles (sized by upvotes)
+- [x] Render safe zones with emoji markers (🏥 👮 ☕ 💊 🏠)
+- [x] Draw "Safe Paths" as glowing green polylines
+- [x] Add legend bar with toggle controls
 
-### 3. Mock Data Generation
-- [ ] Write a script (`seed.js`) to generate mock "Threat Zones" (e.g., broken lights, harassment reports) and "Safe Zones" (police stations) around a specific testing coordinate.
-- [ ] Push mock data to MongoDB.
+### Phase 3: Civic Reporting (COMPLETE)
+- [x] Build ReportScreen with category/severity selectors
+- [x] Save reports to local SQLite database
+- [x] Build DashboardScreen with Priority Poll (upvoting)
+- [x] Implement Municipal Loop mock email (console log + UI alert)
+- [x] Auto-trigger municipal email at 10 upvotes threshold
 
-### 4. Algorithm Development
-- [ ] Create the routing utility function that takes Start Coordinate, End Coordinate, and queries the Leaflet Routing API for multiple routes.
-- [ ] Implement the Python/Node helper that compares these route coordinates against the Threat/Safe zone datasets.
+### Phase 4: Emergency System (COMPLETE)
+- [x] Build PanicButton with long-press activation
+- [x] Implement escalation sequence (contacts → GPS → police timer)
+- [x] Add haptic feedback and animated pulse ring
+- [x] Log emergencies to SQLite
 
-### 5. UI Elements
-- [ ] Build the "Safe Space" floating action button.
-- [ ] Build the camera integration for the Civic Reporting flow.
-- [ ] Build the Panic Button slider.
+### Phase 5: Polish & Demo Prep
+- [ ] Test full flow on web browser (presentation mode)
+- [ ] Test on mobile via Expo Go
+- [ ] Add more mock safe paths for demo
+- [ ] Fine-tune map popup styling
+- [ ] Prepare pitch deck demo walkthrough
 
 > [!IMPORTANT]
-> Always mark off these tasks as you complete them to maintain organization during the sprint. Do not jump to Phase 4 before Phase 1 and 2 are fully tested.
+> The app runs with a single command: `cd guardian-app && npm install && npx expo start --web`
+> No backend, no cloud database, no API keys required.

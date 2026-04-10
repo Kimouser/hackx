@@ -3,35 +3,48 @@
 ## The Vision
 A specialized mapping application that prioritizes female safety over travel time. While traditional maps (e.g., Google Maps) focus on the shortest or fastest path, Project Guardian calculates the safest route based on lighting density, foot traffic, historical crime data, and real-time community reports.
 
+## Technical Approach
+- **Single Expo App**: Cross-platform (Web + iOS + Android) with no backend dependency.
+- **Local-First Database**: SQLite via expo-sqlite — works offline, auto-seeds on first launch.
+- **LeafletJS Mapping**: Custom dark-themed map with safety overlays (threat zones, safe paths, safe spaces).
+
 ## Core Features
 
 ### 1. The Safety-First Map
-- **Dynamic Routing Engine**: A navigation tool that plots the safest route for women at night. 
-- **Safe Paths**: The algorithm prioritizes areas that are well-lit, highly active, and confirmed safe via public surveys and crowdsourced data.
+- **Dynamic Routing Engine**: A navigation tool that plots the safest route for women at night.
+- **Safe Paths**: Glowing green lines on the map connecting well-lit, high-activity safe zones.
+- **Threat Zones**: Red pulsing circles showing crowdsourced danger areas.
 
 ### 2. Verified Safe Space Hotspots
-- **One-Touch Navigation**: A dedicated button on the map that instantly displays and routes to nearby labeled safe zones.
+- **One-Touch Navigation**: A dedicated button on the map that instantly displays nearby safe zones.
 - **Categories Include**:
-  - Hospitals and Medical Shops
-  - Police Stations
-  - 24/7 Public Hotspots (e.g., late-night cafes, gas stations)
+  - Hospitals and Medical Shops (🏥)
+  - Police Stations (👮)
+  - 24/7 Public Hotspots — cafes, gas stations (☕)
+  - Pharmacies (💊)
+  - Women's Shelters (🏠)
 
 ### 3. Community Vigilance & Civic Action
-- **Reporting Dashboard**: Users can report issues directly from the app (e.g., eve-teasing spots, non-functioning streetlights, unresponsive police stations) by taking a photo and dropping a pin.
-- **The Priority Poll**: Every reported issue appears on a localized dashboard for the community to "Upvote". This prevents spam and highlights the most critical threats.
+- **Reporting Dashboard**: Users report issues (eve-teasing spots, broken streetlights, unresponsive police) by dropping a pin and selecting a category.
+- **The Priority Poll**: Every reported issue appears on a community dashboard for "Upvoting". This prevents spam and highlights the most critical threats.
+- **Local SQLite Storage**: All reports stored locally — no cloud dependency.
 
 ### 4. The "Municipal Loop" (Automated Accountability)
-- **Escalating Alerts**: Top-voted issues are automatically reported to the local Municipal Corporation or relevant authority via email/API.
-- **Auto-Follow-Up**: If the issue remains unresolved after a set period, the system sends repeated follow-up emails.
-- **Volunteer Amplification**: Unresolved issues are flagged as a "Threat" to registered volunteers who then amplify the issue via social media campaigns.
+- **Escalating Alerts**: Top-voted issues (10+ upvotes) auto-generate a formatted email to the Municipal Corporation.
+- **Demo Mode**: Email is logged to console and shown as a UI confirmation.
+- **Production Mode**: Would use Nodemailer/SendGrid for real delivery.
 
 ### 5. Emergency Response System
-- **App Panic Button**: Instant access to emergency services and contacts within the app.
-- **Volunteer Bodyguard Network**: A peer-to-peer emergency response system. Users can request a verified local volunteer to assist them in an emergency, acting as a physical escort or bodyguard.
+- **Panic Button (Guardian Bracelet Simulation)**: Long-press SOS button triggers:
+  1. Haptic feedback / vibration
+  2. Emergency contact notification (mock)
+  3. GPS tracking activation (mock)
+  4. 5-minute police escalation timer
+- **Production Hardware**: The Guardian Bracelet — a BLE wearable with capacitive touch sensor.
 
 ## The Revenue Model: The Guardian Bracelet
 A premium hardware accessory that acts as a silent alarm and safety companion.
 - **Capacitive Touch Sensor**: Discrete validation.
-- **Trigger**: When tapped, it sends an emergency "check-up" push notification to the user’s designated contacts.
-- **Escalation**: If the contacts do not report back that the user is safe within a timeframe, the system automatically sends a distress signal to the police.
-- **Live Tracking**: Transmits the current GPS location (or last known location via the phone's bluetooth cache if the bracelet goes offline).
+- **Trigger**: When tapped, sends an emergency "check-up" notification to designated contacts.
+- **Escalation**: If contacts don't confirm safety within the timeframe, system alerts police.
+- **Live Tracking**: Transmits GPS location via phone's Bluetooth connection.
