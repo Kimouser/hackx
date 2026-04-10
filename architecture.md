@@ -5,7 +5,7 @@ Project Guardian requires a robust, real-time architecture capable of handling g
 
 ## Frontend (Mobile Application)
 - **Framework**: React Native or Expo (Cross-platform for iOS and Android).
-- **Mapping Library**: **Mapbox GL JS / Mapbox React Native** (Chosen for extensive customization of map layers, allowing us to build a custom "Safety Overlay").
+- **Mapping Library**: **LeafletJS / React-Leaflet** (Chosen for extensive customization of map layers, allowing us to build a custom "Safety Overlay").
 - **State Management**: Redux or Zustand for managing user state, location, and emergency status.
 
 ## Backend (API & Services)
@@ -15,8 +15,8 @@ Project Guardian requires a robust, real-time architecture capable of handling g
 - **Email/Notification Service**: Twilio (for SMS fallbacks) and SendGrid (for the Municipal Loop auto-emailing).
 
 ## The "Safety First" Algorithm
-A custom weighted routing algorithm built on top of the Mapbox Directions API.
-1. **Base Route Generation**: Mapbox provides 3 alternative routes.
+A custom weighted routing algorithm built on top of the Leaflet Routing API.
+1. **Base Route Generation**: Leaflet provides 3 alternative routes.
 2. **Weighting Application**:
    - *Lighting Layer*: Intersects route points with municipal street-light data or derived light density maps (Weight: +30%).
    - *Threat Layer*: Intersects with unresolved community reports (Weight: -50%).

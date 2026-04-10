@@ -27,14 +27,14 @@ hackx/
 │   │   ├── models/                # Mongoose database schemas (e.g., User, Report, Zone)
 │   │   ├── routes/                # Express route definitions mapped to controllers
 │   │   ├── services/              # Core business logic isolated into modules
-│   │   │   ├── mapService.js      # Map Logic: safe-routing algorithms, Mapbox API wrapper
+│   │   │   ├── mapService.js      # Map Logic: safe-routing algorithms, Leaflet API wrapper
 │   │   │   ├── authService.js     # Auth Logic: JWT token generation, password hashing
 │   │   │   ├── civicService.js    # Civic Reporting: upvoting logic, the "Municipal Loop" (Nodemailer/SendGrid)
 │   │   │   └── hardwareService.js # Mock integrations for the Guardian Bracelet hardware
 │   │   ├── utils/                 # General helpers (loggers, error formatting, etc.)
 │   │   └── app.js                 # Express app initialization
 │   ├── package.json
-│   └── .env                       # Environment variables (DB URI, Mapbox key, etc.)
+│   └── .env                       # Environment variables (DB URI, Leaflet key, etc.)
 │
 ├── guardian-app/                  # React Native mobile app (Expo + NativeWind)
 │   ├── src/
@@ -42,7 +42,7 @@ hackx/
 │   │   ├── components/            # Reusable UI elements (PanicButton, ThreatCard, etc.)
 │   │   ├── navigation/            # React Navigation setups (Tab & Stack navigators)
 │   │   ├── screens/               # Main app views
-│   │   │   ├── MapScreen.jsx      # Core map interface w/ Mapbox
+│   │   │   ├── MapScreen.jsx      # Core map interface w/ LeafletJS
 │   │   │   ├── ReportScreen.jsx   # Reporting form and civic UI
 │   │   │   ├── AuthScreen.jsx     # Login / Registration
 │   │   │   └── DashboardScreen.jsx# Priority poll and community updates
@@ -67,7 +67,7 @@ hackx/
 ## 🏗️ Architecture Modules
 
 ### 🗺️ Map Logic Service
-- **Backend (`backend/src/services/mapService.js`)**: Interfaces with Mapbox Directions API, queries the MongoDB for Threat/Safe zones, and evaluates the safest path algorithm (higher weight for well-lit/active areas).
+- **Backend (`backend/src/services/mapService.js`)**: Interfaces with Leaflet Routing API, queries the MongoDB for Threat/Safe zones, and evaluates the safest path algorithm (higher weight for well-lit/active areas).
 - **Frontend (`guardian-app/src/screens/MapScreen.jsx` & `services/mapApi.js`)**: Consumes map tiles and distinctively draws optimal routes (e.g., strong glowing green lines for safe paths, warnings for threat zones) using NativeWind theming.
 
 ### 🔐 Auth Service
@@ -99,7 +99,7 @@ The backend handles our safety-first routing engine, MongoDB database connection
    ```env
    PORT=5000
    MONGO_URI=your_mongodb_atlas_connection_string
-   MAPBOX_API_KEY=your_mapbox_secret_token
+   LEAFLET_API_KEY=your_leaflet_secret_token
    # For Municipal Loop emails (e.g., SendGrid/Nodemailer)
    EMAIL_USER=your_email@gmail.com
    EMAIL_PASS=your_app_password
@@ -111,7 +111,7 @@ The backend handles our safety-first routing engine, MongoDB database connection
    ```
 
 ### 2. Frontend Setup (Expo / React Native)
-The mobile frontend leverages Mapbox mapping tools and NativeWind for dark/neon themes.
+The mobile frontend leverages LeafletJS mapping tools and NativeWind for dark/neon themes.
 
 1. **Navigate to the App Directory:**
    ```bash
@@ -127,8 +127,8 @@ The mobile frontend leverages Mapbox mapping tools and NativeWind for dark/neon 
    # Core requirements for the Guardian App
    npm install @react-navigation/native @react-navigation/native-stack @rneui/themed
    npm install react-native-screens react-native-safe-area-context
-   # Mapbox implementation
-   npm install @rnmapbox/maps
+   # LeafletJS implementation
+   npm install react-native-leaflet-view
    # Nativewind for Tailwind styling
    npm install nativewind
    npm install --save-dev tailwindcss
@@ -140,9 +140,9 @@ The mobile frontend leverages Mapbox mapping tools and NativeWind for dark/neon 
    ```
    *Press `a` to open in Android Emulator, `i` to open in iOS Simulator, or scan the QR code with the Expo Go app on your physical device.*
 
-### 3. Essential Next Steps (Mapbox Configuration)
+### 3. Essential Next Steps (Leaflet Configuration)
 To get the custom map styles and safely overlay routes working:
-- Ensure you follow the Mapbox React Native installation instructions for adding your Mapbox Secret download token to your `build.gradle` (Android) and `.netrc` (iOS).
+- Ensure you follow the Leaflet React Native installation instructions for configuring the map views.
 
 ---
 *Built during HackX Hackathon*

@@ -27,7 +27,7 @@
 - **Hardware (Revenue Model)**: The Guardian Bracelet. A premium capacitive-touch wearable that triggers silent check-ups and escalates to police dispatch if the user goes unresponsive. 
 
 ## Slide 7: Technical Architecture
-- **Tech Stack**: React Native, Node.js, MongoDB, Mapbox.
+- **Tech Stack**: React Native, Node.js, MongoDB, LeafletJS.
 - **Highlight**: The custom routing weighting algorithm.
 
 ## Slide 8: What's Next & The Ask

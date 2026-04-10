@@ -5,10 +5,10 @@ This roadmap is optimized for a hackathon environment, focusing on delivering a 
 ## Phase 1: Setup & Core Foundations (Hours 0-4)
 - **Hour 0-1**: Repository initialization, CI/CD setup, database provisioning (MongoDB Atlas).
 - **Hour 1-2**: Mobile app skeleton generation (Expo/React Native). Implement basic navigation and UI theme (Dark mode, neon safety accents).
-- **Hour 2-4**: Mapbox integration. Successfully render a map centered on the user's location with basic markers.
+- **Hour 2-4**: LeafletJS integration. Successfully render a map centered on the user's location with basic markers.
 
 ## Phase 2: The "Safety First" Engine (Hours 4-10)
-- **Hour 4-6**: Integrate Mapbox Directions API. Pull 2-3 standard routes between points.
+- **Hour 4-6**: Integrate Leaflet Routing Machine API. Pull 2-3 standard routes between points.
 - **Hour 6-8**: Build the Safety Overlay logic. Create a mock dataset of "Threat Zones" and "Well-Lit Zones". 
 - **Hour 8-10**: Implement the custom weighting algorithm to select and render the "Safest Route" prominently over the fastest route.
 

@@ -8,16 +8,16 @@
 - [ ] Initialize a backend Node.js repository (`mkdir backend`, `npm init -y`, `npm i express mongoose cors dotenv`).
 
 ### 2. Map Implementation
-- [ ] Acquire Mapbox API keys.
+- [ ] Acquire LeafletJS/OSM API routing keys.
 - [ ] Create a core `MapScreen` component in the app.
-- [ ] Implement the Mapbox viewport and handle user geolocation permissions.
+- [ ] Implement the LeafletJS viewport and handle user geolocation permissions.
 
 ### 3. Mock Data Generation
 - [ ] Write a script (`seed.js`) to generate mock "Threat Zones" (e.g., broken lights, harassment reports) and "Safe Zones" (police stations) around a specific testing coordinate.
 - [ ] Push mock data to MongoDB.
 
 ### 4. Algorithm Development
-- [ ] Create the routing utility function that takes Start Coordinate, End Coordinate, and queries the Mapbox Directions API for multiple routes.
+- [ ] Create the routing utility function that takes Start Coordinate, End Coordinate, and queries the Leaflet Routing API for multiple routes.
 - [ ] Implement the Python/Node helper that compares these route coordinates against the Threat/Safe zone datasets.
 
 ### 5. UI Elements
