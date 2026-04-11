@@ -1,6 +1,6 @@
 /**
  * MapScreen.jsx  –  Project Guardian
- * Dynamic Location Filtering: Stats drop to 0 if no data is in the current region
+ * Added: Live Search Autocomplete with Debouncing
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -64,8 +64,13 @@ const MapScreen = () => {
   const [mapCenter, setMapCenter] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude });
   const [userLocName, setUserLocName] = useState('Ahmedabad, GJ');
   const [isLocating, setIsLocating] = useState(false);
+  
+  // ─── NEW: Autocomplete State ───
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceTimeout = useRef(null); // Keeps track of typing pauses
 
   const toggleSidebar = useCallback(() => {
     const next = sidebarOpen ? 0 : 1;
@@ -111,9 +116,7 @@ const MapScreen = () => {
           setUserLocName(`${geocode[0].city || geocode[0].subregion || 'Unknown'}, ${geocode[0].region || ''}`);
           return;
         }
-      } catch (expoErr) {
-        console.log("Expo geocoding failed, trying web fallback...");
-      }
+      } catch (expoErr) { console.log("Expo geocoding failed, trying web fallback..."); }
 
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
       const data = await res.json();
@@ -125,52 +128,70 @@ const MapScreen = () => {
       } else {
         setUserLocName('Current Location');
       }
-    } catch (error) { 
-      console.error(error); 
-    } finally { 
-      setIsLocating(false); 
-    }
+    } catch (error) { console.error(error); } finally { setIsLocating(false); }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    Keyboard.dismiss();
-
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
-      
-      if (data && data.length > 0) {
-        const destLat = parseFloat(data[0].lat);
-        const destLng = parseFloat(data[0].lon);
-        const destName = data[0].display_name.split(',')[0]; 
-
-        const startLat = userLocation ? userLocation.lat : AHMEDABAD.latitude;
-        const startLng = userLocation ? userLocation.lng : AHMEDABAD.longitude;
-
-        setMapCenter({ lat: destLat, lng: destLng });
-        setUserLocation({ lat: destLat, lng: destLng });
-        setUserLocName(destName);
-
-        const newPathCoords = [[startLat, startLng], [destLat, destLng]];
-        setDynamicPaths([{ coords: newPathCoords }]);
-
-        const newJourneyMock = {
-          title: `Route to ${destName}`,
-          start: 'Previous Location',
-          end: destName,
-          route: newPathCoords,
-          segments: [{ street: 'AI Tracking Route...', locality: destName, characteristics: 'Analyzing dynamic path safety.' }]
-        };
-        
-        loadJourneySummary(newJourneyMock);
-
-      } else { alert('Location not found.'); }
-    } catch (err) { console.error(err); } finally {
-      setIsSearching(false);
-      setSearchQuery(''); 
+  // ─── NEW: Handle User Typing (Debounced) ───
+  const handleSearchInputChange = (text) => {
+    setSearchQuery(text);
+    
+    // Clear list if text is too short
+    if (text.length < 3) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
     }
+
+    // Clear previous timer if user keeps typing
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+
+    // Set new timer to fetch suggestions after 500ms of no typing
+    debounceTimeout.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        // limit=5 keeps the dropdown clean
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&limit=5&addressdetails=1`);
+        const data = await res.json();
+        setSuggestions(data || []);
+        setShowSuggestions(true);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+  };
+
+  // ─── NEW: Handle Clicking a Suggestion ───
+  const handleSelectSuggestion = (item) => {
+    Keyboard.dismiss();
+    setShowSuggestions(false);
+    
+    const destName = item.display_name.split(',')[0]; 
+    setSearchQuery(destName); // Update bar to chosen name
+
+    const destLat = parseFloat(item.lat);
+    const destLng = parseFloat(item.lon);
+    
+    const startLat = userLocation ? userLocation.lat : AHMEDABAD.latitude;
+    const startLng = userLocation ? userLocation.lng : AHMEDABAD.longitude;
+
+    setMapCenter({ lat: destLat, lng: destLng });
+    setUserLocation({ lat: destLat, lng: destLng });
+    setUserLocName(destName);
+
+    const newPathCoords = [[startLat, startLng], [destLat, destLng]];
+    setDynamicPaths([{ coords: newPathCoords }]);
+
+    const newJourneyMock = {
+      title: `Route to ${destName}`,
+      start: 'Previous Location',
+      end: destName,
+      route: newPathCoords,
+      segments: [{ street: 'AI Tracking Route...', locality: destName, characteristics: 'Analyzing dynamic path safety.' }]
+    };
+    
+    loadJourneySummary(newJourneyMock);
   };
 
   if (loading) {
@@ -184,10 +205,8 @@ const MapScreen = () => {
 
   const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
 
-  // ─── NEW: DYNAMIC DATA FILTERING ───
-  // Checks if the database points are within roughly ~30km of the current map center
   const isNearby = (lat, lng) => {
-    const threshold = 0.3; // Approx 30km radius in degrees
+    const threshold = 0.3; 
     return Math.abs(lat - mapCenter.lat) < threshold && Math.abs(lng - mapCenter.lng) < threshold;
   };
 
@@ -195,8 +214,6 @@ const MapScreen = () => {
   const activeThreats = threats.filter(t => isNearby(t.lat || t.latitude, t.lng || t.longitude));
 
   const hasLocalData = activeSafeZones.length > 0 || activeThreats.length > 0;
-
-  // Determine dynamic stats
   const displayStats = hasLocalData 
     ? { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 } 
     : { safeScore: 0, nearbyUnits: 0, etaMinutes: 0 };
@@ -234,18 +251,39 @@ const MapScreen = () => {
 
       {!isSOSActive && (
         <View style={styles.legendBar}>
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search destination..."
-              placeholderTextColor={C.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onSubmitEditing={handleSearch}
-            />
-            <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
-              {isSearching ? <ActivityIndicator size="small" color="#fff" /> : <Text>🔍</Text>}
-            </TouchableOpacity>
+          
+          {/* ── UPDATED: Search Wrapper with Dropdown ── */}
+          <View style={styles.searchWrapper}>
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search destination..."
+                placeholderTextColor={C.textMuted}
+                value={searchQuery}
+                onChangeText={handleSearchInputChange} // Uses debounced function
+              />
+              <View style={styles.searchButton}>
+                {isSearching ? <ActivityIndicator size="small" color={C.purpleBright} /> : <Text>🔍</Text>}
+              </View>
+            </View>
+
+            {/* The Autocomplete Dropdown Box */}
+            {showSuggestions && suggestions.length > 0 && (
+              <View style={styles.suggestionsDropdown}>
+                <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
+                  {suggestions.map((item, index) => (
+                    <TouchableOpacity 
+                      key={index} 
+                      style={styles.suggestionItem} 
+                      onPress={() => handleSelectSuggestion(item)}
+                    >
+                      <Text style={styles.suggestionTitle}>{item.display_name.split(',')[0]}</Text>
+                      <Text style={styles.suggestionSubtitle} numberOfLines={1}>{item.display_name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           <View style={styles.legendItemGroup}>
@@ -258,8 +296,8 @@ const MapScreen = () => {
 
       {!isSOSActive && (
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: panelTranslate }] }]}>
+          {/* ... Sidebar contents remain unchanged ... */}
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarContent}>
-            
             <TouchableOpacity style={styles.locRow} onPress={handleLocateMe} activeOpacity={0.7}>
               <View style={[styles.locDot, isLocating && { backgroundColor: C.teal, shadowColor: C.teal }]} />
               <View>
@@ -310,9 +348,37 @@ const styles = StyleSheet.create({
   loadingText: { color: C.textSub, fontSize: 13, letterSpacing: 1 },
   
   legendBar: { position: 'absolute', top: 0, left: SIDEBAR_W, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 20, backgroundColor: 'rgba(14,14,26,0.95)', zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
-  searchContainer: { width: 300, height: 36, flexDirection: 'row', backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.border },
+  
+  // ─── NEW: Autocomplete Styles ───
+  searchWrapper: { width: 300, position: 'relative', zIndex: 999 },
+  searchContainer: { width: '100%', height: 36, flexDirection: 'row', backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.border },
   searchInput: { flex: 1, color: C.text, paddingHorizontal: 12, fontSize: 13, outlineStyle: 'none' },
   searchButton: { paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderColor: C.border },
+  
+  suggestionsDropdown: {
+    position: 'absolute',
+    top: 42, // Sits right underneath the search bar
+    left: 0,
+    right: 0,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.panelBorder,
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 10,
+    overflow: 'hidden'
+  },
+  suggestionItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  suggestionTitle: { color: C.text, fontSize: 13, fontWeight: '600' },
+  suggestionSubtitle: { color: C.textSub, fontSize: 11, marginTop: 2 },
+
   legendItemGroup: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
