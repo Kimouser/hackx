@@ -1,182 +1,121 @@
 /**
- * Guardian Database — In-Memory Store
- *
- * Uses a pure JS in-memory data store that works on Web + iOS + Android
- * with zero native dependencies. Data is pre-seeded from seed.js on init.
- *
- * For production: swap this with expo-sqlite (native) or an API backend.
+ * database.js - Project Guardian
+ * Persistent SQLite storage using expo-sqlite.
  */
 
-import { SEED_REPORTS, SEED_SAFE_ZONES } from './seed';
+import * as SQLite from 'expo-sqlite';
 
-// ─── In-Memory Tables ───
-let reports = [];
-let safeZones = [];
-let emergencyLogs = [];
-let users = [];
-let nextReportId = 1;
-let nextLogId = 1;
-let nextUserId = 1;
-let initialized = false;
+// Singleton DB connection
+let _db = null;
 
-// ─── Init & Seed ───
-export const getDatabase = async () => {
-  if (initialized) return;
-  initialized = true;
-
-  // Seed with mock data
-  reports = SEED_REPORTS.map((r, i) => ({
-    id: i + 1,
-    ...r,
-    userUpvoted: false,
-    created_at: new Date().toISOString(),
-  }));
-  nextReportId = reports.length + 1;
-
-  safeZones = SEED_SAFE_ZONES.map((z, i) => ({
-    id: i + 1,
-    ...z,
-    is_verified: 1,
-    operating_hours: '24/7',
-    created_at: new Date().toISOString(),
-  }));
-
-  console.log(`[Guardian DB] Seeded ${reports.length} threat reports + ${safeZones.length} safe zones`);
+export const getDB = async () => {
+  if (!_db) {
+    _db = await SQLite.openDatabaseAsync('guardian.db');
+  }
+  return _db;
 };
 
-// ─── Report CRUD ───
-export const getAllReports = async () => {
-  return [...reports]
-    .filter((r) => r.status !== 'resolved')
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+/** Initializes tables if they don't exist */
+export const setupDatabase = async () => {
+  const db = await getDB();
+  
+  // Threats / Reports Table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      description TEXT,
+      category TEXT,
+      severity TEXT,
+      latitude REAL,
+      longitude REAL,
+      upvotes INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      municipal_email_sent INTEGER DEFAULT 0,
+      municipal_email_date TEXT,
+      image_uri TEXT,
+      userUpvoted INTEGER DEFAULT 0,
+      created_at TEXT
+    );
+  `);
+
+  // Safe Zones Table (Includes the 'type' column for icons)
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS safe_zones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      type TEXT, 
+      latitude REAL,
+      longitude REAL,
+      address TEXT,
+      phone TEXT,
+      is_verified INTEGER DEFAULT 1,
+      operating_hours TEXT DEFAULT '24/7',
+      created_at TEXT
+    );
+  `);
+
+  // Emergency Logs Table
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS emergency_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_type TEXT,
+      latitude REAL,
+      longitude REAL,
+      status TEXT,
+      created_at TEXT
+    );
+  `);
 };
 
-export const getReportsForMap = async () => {
-  return reports
-    .filter((r) => r.status !== 'resolved')
-    .map((r) => ({
-      id: r.id,
-      title: r.title,
-      category: r.category,
-      severity: r.severity,
-      latitude: r.latitude,
-      longitude: r.longitude,
-      upvotes: r.upvotes,
-      status: r.status,
-    }));
+/** Wipes the DB for fresh seeding - useful for demos */
+export const resetDatabase = async () => {
+  const db = await getDB();
+  await db.execAsync('DROP TABLE IF EXISTS reports;');
+  await db.execAsync('DROP TABLE IF EXISTS safe_zones;');
+  await db.execAsync('DROP TABLE IF EXISTS emergency_logs;');
+  await setupDatabase();
 };
 
-export const createReport = async ({ title, description, category, severity, latitude, longitude, imageUri }) => {
-  const id = nextReportId++;
-  const report = {
-    id,
-    title,
-    description: description || '',
-    category,
-    severity: severity || 'medium',
-    latitude,
-    longitude,
-    upvotes: 0,
-    status: 'active',
-    municipal_email_sent: 0,
-    municipal_email_date: null,
-    image_uri: imageUri || '',
-    userUpvoted: false,
-    created_at: new Date().toISOString(),
-  };
-  reports.push(report);
-  console.log(`[Guardian DB] New report #${id}: ${title}`);
-  return id;
+/** Combined data fetch for the MapScreen */
+export const getMapOverlay = async () => {
+  const db = await getDB();
+  const threats = await db.getAllAsync('SELECT * FROM reports WHERE status != "resolved"');
+  const safeZones = await db.getAllAsync('SELECT * FROM safe_zones');
+  return { threats, safeZones };
+};
+
+export const createReport = async (data) => {
+  const db = await getDB();
+  const res = await db.runAsync(
+    `INSERT INTO reports (title, description, category, severity, latitude, longitude, image_uri, created_at) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [data.title, data.description || '', data.category, data.severity || 'medium', data.latitude, data.longitude, data.imageUri || '', new Date().toISOString()]
+  );
+  return res.lastInsertRowId;
 };
 
 export const upvoteReport = async (id) => {
-  const report = reports.find((r) => r.id === id);
-  if (!report) throw new Error('Report not found');
+  const db = await getDB();
+  const report = await db.getFirstAsync('SELECT * FROM reports WHERE id = ?', [id]);
+  if (!report) return null;
 
-  if (!report.userUpvoted) {
-    report.upvotes += 1;
-    report.userUpvoted = true;
+  const newUpvotes = report.userUpvoted ? report.upvotes - 1 : report.upvotes + 1;
+  const newUserUpvoted = report.userUpvoted ? 0 : 1;
 
-    // Municipal Loop: auto-trigger at 10 upvotes
-    if (report.upvotes >= 10 && !report.municipal_email_sent) {
-      report.municipal_email_sent = 1;
-      report.municipal_email_date = new Date().toISOString();
-      report.status = 'municipal_notified';
-      console.log(`[Guardian DB] Municipal Loop triggered for report #${id}`);
-      return { ...report, municipalTriggered: true };
-    }
-  } else {
-    report.upvotes = Math.max(0, report.upvotes - 1);
-    report.userUpvoted = false;
-  }
-
-  return { ...report, municipalTriggered: false };
+  await db.runAsync(
+    'UPDATE reports SET upvotes = ?, userUpvoted = ? WHERE id = ?',
+    [newUpvotes, newUserUpvoted, id]
+  );
+  
+  return { ...report, upvotes: newUpvotes, userUpvoted: !!newUserUpvoted };
 };
 
-// ─── User CRUD ───
-export const createUser = async ({ name, email, password, role, aadhar, area }) => {
-  const existing = users.find(u => u.email === email);
-  if (existing) throw new Error('User already exists');
-
-  const id = nextUserId++;
-  const user = {
-    id,
-    name,
-    email,
-    password, // In real app, hash this
-    role, // 'user' or 'volunteer'
-    aadhar: role === 'volunteer' ? aadhar : null,
-    area: role === 'volunteer' ? area : null,
-    created_at: new Date().toISOString(),
-  };
-  users.push(user);
-  console.log(`[Guardian DB] New user #${id}: ${name} (${role})`);
-  return { ...user, password: undefined };
-};
-
-export const loginUser = async ({ name, email, password, role }) => {
-  const user = users.find(u => u.email === email && u.password === password && u.role === role);
-  if (!user) throw new Error('Invalid credentials');
-  console.log(`[Guardian DB] Login: ${user.name}`);
-  return { ...user, password: undefined };
-};
-
-// ─── SafeZone Queries ───
-export const getAllSafeZones = async () => {
-  return [...safeZones].sort((a, b) => a.category.localeCompare(b.category));
-};
-
-export const getSafeZonesForMap = async () => {
-  return safeZones.map((z) => ({
-    id: z.id,
-    name: z.name,
-    category: z.category,
-    latitude: z.latitude,
-    longitude: z.longitude,
-    phone: z.phone,
-  }));
-};
-
-// ─── Map Overlay (combined) ───
-export const getMapOverlay = async () => {
-  const [threats, zones] = await Promise.all([
-    getReportsForMap(),
-    getSafeZonesForMap(),
-  ]);
-  return { threats, safeZones: zones };
-};
-
-// ─── Emergency Logs ───
 export const logEmergency = async (triggerType, latitude, longitude) => {
-  const id = nextLogId++;
-  emergencyLogs.push({
-    id,
-    trigger_type: triggerType,
-    latitude: latitude || 23.0225,
-    longitude: longitude || 72.5714,
-    status: 'triggered',
-    created_at: new Date().toISOString(),
-  });
-  console.log(`[Guardian DB] Emergency logged: ${triggerType}`);
-  return id;
+  const db = await getDB();
+  const res = await db.runAsync(
+    'INSERT INTO emergency_logs (trigger_type, latitude, longitude, status, created_at) VALUES (?, ?, ?, ?, ?)',
+    [triggerType, latitude || 19.073, longitude || 72.899, 'triggered', new Date().toISOString()]
+  );
+  return res.lastInsertRowId;
 };
