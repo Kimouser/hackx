@@ -97,23 +97,55 @@ const MapScreen = () => {
 
   useEffect(() => { loadData(); loadJourneySummary(); }, [loadData]);
 
-  // Handle actual GPS hardware
+  // Handle actual GPS hardware with Web Fallback for Reverse Geocoding
   const handleLocateMe = async () => {
     setIsLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        alert('Permission to access location was denied');
+        return;
+      }
 
+      // 1. Get Coordinates
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
 
+      // 2. Update Map and Pin instantly
       setUserLocation({ lat, lng });
       setMapCenter({ lat, lng });
 
-      const geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-      if (geocode.length > 0) setUserLocName(`${geocode[0].city || geocode[0].subregion}, ${geocode[0].region}`);
-    } catch (error) { console.error(error); } finally { setIsLocating(false); }
+      // 3. Reverse Geocode (Try Expo first, fallback to OpenStreetMap for Web)
+      try {
+        const geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+        if (geocode && geocode.length > 0 && (geocode[0].city || geocode[0].region)) {
+          setUserLocName(`${geocode[0].city || geocode[0].subregion || 'Unknown'}, ${geocode[0].region || ''}`);
+          return;
+        }
+      } catch (expoErr) {
+        console.log("Expo geocoding failed, trying web fallback...");
+      }
+
+      // Web Fallback (Nominatim API)
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const data = await res.json();
+      
+      if (data && data.address) {
+        // Nominatim returns various location types depending on zoom/area
+        const city = data.address.city || data.address.town || data.address.suburb || 'Unknown';
+        const state = data.address.state || '';
+        setUserLocName(`${city}, ${state}`);
+      } else {
+        setUserLocName('Current Location');
+      }
+
+    } catch (error) { 
+      console.error(error); 
+      setUserLocName('Location Error');
+    } finally { 
+      setIsLocating(false); 
+    }
   };
 
   // Handle Search (Move Map, Move Blue Dot, Update Journey AI)
