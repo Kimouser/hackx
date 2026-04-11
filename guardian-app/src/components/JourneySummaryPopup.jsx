@@ -1,41 +1,79 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Animated } from 'react-native';
 import colors from '../theme/colors';
 
 const JourneySummaryPopup = ({ summary, loading, onRefresh }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [animation] = useState(new Animated.Value(0));
+
   if (!summary) return null;
 
+  const toggleExpanded = () => {
+    const toValue = isExpanded ? 0 : 1;
+    Animated.spring(animation, {
+      toValue,
+      useNativeDriver: false,
+      tension: 50,
+      friction: 7,
+    }).start();
+    setIsExpanded(!isExpanded);
+  };
+
+  const expandedHeight = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [60, 320], // collapsed height vs expanded height
+  });
+
+  const contentOpacity = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
   return (
-    <View style={styles.popup}>
-      <View style={styles.headerRow}>
-        <Text style={styles.heading}>Journey Preview</Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-          {loading ? (
-            <ActivityIndicator size="small" color={colors.safe} />
-          ) : (
-            <Text style={styles.refreshLabel}>Refresh</Text>
-          )}
+    <Animated.View style={[styles.popup, { height: expandedHeight }]}>
+      {/* Collapsed Header - Always Visible */}
+      <TouchableOpacity style={styles.collapsedHeader} onPress={toggleExpanded}>
+        <View style={styles.iconContainer}>
+          <Text style={styles.icon}>🗺️</Text>
+        </View>
+        <Text style={styles.collapsedTitle}>Journey Preview</Text>
+        <TouchableOpacity style={styles.expandButton} onPress={toggleExpanded}>
+          <Text style={styles.expandIcon}>{isExpanded ? '−' : '+'}</Text>
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
 
-      <Text style={styles.sectionTitle}>Overall</Text>
-      <Text style={styles.sectionText}>{summary.overall}</Text>
+      {/* Expanded Content - Animated */}
+      <Animated.View style={[styles.expandedContent, { opacity: contentOpacity }]}>
+        <View style={styles.headerRow}>
+          <Text style={styles.heading}>Route Analysis</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.safe} />
+            ) : (
+              <Text style={styles.refreshLabel}>⟳</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-      <Text style={styles.sectionTitle}>Road / Plot Holes</Text>
-      <Text style={styles.sectionText}>{summary.plotHoles}</Text>
+        <Text style={styles.sectionTitle}>Overall</Text>
+        <Text style={styles.sectionText}>{summary.overall}</Text>
 
-      <Text style={styles.sectionTitle}>Street Lights</Text>
-      <Text style={styles.sectionText}>{summary.streetLights}</Text>
+        <Text style={styles.sectionTitle}>Road / Plot Holes</Text>
+        <Text style={styles.sectionText}>{summary.plotHoles}</Text>
 
-      <Text style={styles.sectionTitle}>Localities</Text>
-      <Text style={styles.sectionText}>{summary.localities}</Text>
+        <Text style={styles.sectionTitle}>Street Lights</Text>
+        <Text style={styles.sectionText}>{summary.streetLights}</Text>
 
-      <Text style={styles.sectionTitle}>Busyness</Text>
-      <Text style={styles.sectionText}>{summary.busyness}</Text>
+        <Text style={styles.sectionTitle}>Localities</Text>
+        <Text style={styles.sectionText}>{summary.localities}</Text>
 
-      <Text style={styles.adviceLabel}>Advice</Text>
-      <Text style={styles.adviceText}>{summary.advice}</Text>
-    </View>
+        <Text style={styles.sectionTitle}>Busyness</Text>
+        <Text style={styles.sectionText}>{summary.busyness}</Text>
+
+        <Text style={styles.adviceLabel}>Advice</Text>
+        <Text style={styles.adviceText}>{summary.advice}</Text>
+      </Animated.View>
+    </Animated.View>
   );
 };
 
@@ -43,20 +81,64 @@ const styles = StyleSheet.create({
   popup: {
     position: 'absolute',
     top: 86,
-    left: 16,
     right: 16,
+    width: 280, // Fixed width for better UX
     backgroundColor: '#111111cc',
     borderColor: colors.safe,
     borderWidth: 1,
     borderRadius: 18,
-    padding: 16,
     zIndex: 100,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.25,
     shadowRadius: 24,
     elevation: 12,
-    gap: 8,
+    overflow: 'hidden', // Important for smooth animation
+  },
+  collapsedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    height: 60,
+  },
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.safe,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  icon: {
+    fontSize: 16,
+  },
+  collapsedTitle: {
+    flex: 1,
+    color: colors.safe,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  expandButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  expandIcon: {
+    color: colors.safe,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  expandedContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   headerRow: {
     flexDirection: 'row',
@@ -70,17 +152,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   refreshButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   refreshLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
+    color: colors.safe,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   sectionTitle: {
     color: colors.safeLight,
