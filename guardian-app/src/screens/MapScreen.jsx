@@ -162,12 +162,11 @@ const MapScreen = () => {
   return (
     <View style={styles.root}>
 
-      {/* ── Map ── */}
       <LeafletMap
         center={{ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude }}
         zoom={13}
-        threats={mapThreats}        {/* ← Passed mapped array */}
-        safeZones={mapSafeZones}    {/* ← Passed mapped array */}
+        threats={mapThreats}
+        safeZones={mapSafeZones}
         safePaths={showPaths ? SAFE_PATHS : []}
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
