@@ -1,5 +1,5 @@
 /**
- * MapScreen.jsx  –  Project Guardian (Demo Ready)
+ * MapScreen.jsx  –  Project Guardian (Interactive Demo Edition)
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -15,7 +15,6 @@ import { getMapOverlay } from '../db/database';
 import { AHMEDABAD } from '../utils/location';
 import { summarizeJourney } from '../services/journeyAI';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
-
 import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
 const C = {
@@ -28,58 +27,33 @@ const C = {
 const TILE_URL = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png';
 const TILE_ATTRIBUTION = '&copy; Stadia Maps';
 
+// Base Paths for initial load
 const SAFE_PATHS = [
-  { coords: [ [23.0305, 72.5653], [23.0305, 72.5580], [23.0305, 72.5540], [23.0335, 72.5540], [23.0365, 72.5540], [23.0365, 72.5463] ] },
-  { coords: [ [23.0242, 72.5720], [23.0195, 72.5720], [23.0140, 72.5720], [23.0140, 72.5680], [23.0140, 72.5640] ] },
-  { coords: [ [23.0380, 72.5580], [23.0380, 72.5540], [23.0330, 72.5540], [23.0305, 72.5540] ] },
+  { coords: [ [23.0305, 72.5653], [23.0305, 72.5580], [23.0305, 72.5540], [23.0335, 72.5540], [23.0365, 72.5540], [23.0365, 72.5463] ] }
 ];
 
-const CURRENT_JOURNEY = {
-  title: 'Paldi to SG Highway Safety Preview',
-  start: 'Paldi Market', end: 'SG Highway Service Road', route: SAFE_PATHS[0].coords,
+const INITIAL_JOURNEY = {
+  title: 'Paldi to SG Highway Preview',
+  start: 'Paldi Market', end: 'SG Highway', route: SAFE_PATHS[0].coords,
   segments: [ { street: 'Ashram Road', locality: 'Paldi', characteristics: 'busy stretch' } ]
 };
 
 const MOCK_STATS = { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 };
 
-function ScoreRing({ score }) { 
-  return (
-    <View style={styles.ringOuter}>
-      <View style={styles.ringInner}>
-        <Text style={styles.scoreNum}>{score}</Text>
-        <Text style={styles.scoreLabel}>SAFE</Text>
-      </View>
-    </View>
-  );
-}
-
-function StatTile({ icon, value, label, accent }) { 
-  return (
-    <View style={[styles.statTile, accent && styles.statTileAccent]}>
-      <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
- }
-
-function LayerToggle({ label, icon, active, color, onPress }) { 
-  const dotColor = color ?? C.purple;
-  return (
-    <TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}>
-      <Text style={styles.layerIcon}>{icon}</Text>
-      <Text style={[styles.layerLabel, active && { color: dotColor }]}>{label}</Text>
-      <View style={[styles.pill, active && { backgroundColor: dotColor }]}><View style={[styles.pillKnob, active && styles.pillKnobOn]} /></View>
-    </TouchableOpacity>
-  );
- }
+function ScoreRing({ score }) { /* ... */ return (<View style={styles.ringOuter}><View style={styles.ringInner}><Text style={styles.scoreNum}>{score}</Text><Text style={styles.scoreLabel}>SAFE</Text></View></View>); }
+function StatTile({ icon, value, label, accent }) { /* ... */ return (<View style={[styles.statTile, accent && styles.statTileAccent]}><Text style={styles.statIcon}>{icon}</Text><Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>); }
+function LayerToggle({ label, icon, active, color, onPress }) { const dotColor = color ?? C.purple; return (<TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}><Text style={styles.layerIcon}>{icon}</Text><Text style={[styles.layerLabel, active && { color: dotColor }]}>{label}</Text><View style={[styles.pill, active && { backgroundColor: dotColor }]}><View style={[styles.pillKnob, active && styles.pillKnobOn]} /></View></TouchableOpacity>); }
 
 const MapScreen = () => {
   const [threats, setThreats] = useState([]);
   const [safeZones, setSafeZones] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Journey & Paths State
   const [journeyLoading, setJourneyLoading] = useState(false);
-  const [journeySummary, setJourneySummary] = useState(CURRENT_JOURNEY); // Initialized instantly so it doesn't hide
+  const [journeySummary, setJourneySummary] = useState(INITIAL_JOURNEY); 
+  const [dynamicPaths, setDynamicPaths] = useState(SAFE_PATHS); // Allows us to update the map line
+
   const [showPaths, setShowPaths] = useState(true);
   const [showThreats, setShowThreats] = useState(true);
   const [showSafeZones, setShowSafeZones] = useState(true);
@@ -89,8 +63,8 @@ const MapScreen = () => {
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
 
-  // ─── GPS & SEARCH STATE ───
-  const [userLocation, setUserLocation] = useState(null); 
+  // GPS & Search State
+  const [userLocation, setUserLocation] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude }); 
   const [mapCenter, setMapCenter] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude });
   const [userLocName, setUserLocName] = useState('Ahmedabad, GJ');
   const [isLocating, setIsLocating] = useState(false);
@@ -112,21 +86,22 @@ const MapScreen = () => {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   }, []);
 
-  const loadJourneySummary = async () => {
+  const loadJourneySummary = async (journeyObj = INITIAL_JOURNEY) => {
     setJourneyLoading(true);
     try {
-      const summary = await summarizeJourney(CURRENT_JOURNEY);
+      const summary = await summarizeJourney(journeyObj);
       setJourneySummary(summary);
     } catch (error) { console.error(error); } finally { setJourneyLoading(false); }
   };
 
   useEffect(() => { loadData(); loadJourneySummary(); }, [loadData]);
 
+  // Handle actual GPS hardware
   const handleLocateMe = async () => {
     setIsLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { alert('Permission to access location was denied'); return; }
+      if (status !== 'granted') return;
 
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const lat = location.coords.latitude;
@@ -136,14 +111,11 @@ const MapScreen = () => {
       setMapCenter({ lat, lng });
 
       const geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-      if (geocode.length > 0) {
-        setUserLocName(`${geocode[0].city || geocode[0].subregion}, ${geocode[0].region}`);
-      } else {
-        setUserLocName('Current Location');
-      }
+      if (geocode.length > 0) setUserLocName(`${geocode[0].city || geocode[0].subregion}, ${geocode[0].region}`);
     } catch (error) { console.error(error); } finally { setIsLocating(false); }
   };
 
+  // Handle Search (Move Map, Move Blue Dot, Update Journey AI)
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
@@ -154,7 +126,33 @@ const MapScreen = () => {
       const data = await res.json();
       
       if (data && data.length > 0) {
-        setMapCenter({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
+        const destLat = parseFloat(data[0].lat);
+        const destLng = parseFloat(data[0].lon);
+        const destName = data[0].display_name.split(',')[0]; // Grabs just the city/area name
+
+        const startLat = userLocation ? userLocation.lat : AHMEDABAD.latitude;
+        const startLng = userLocation ? userLocation.lng : AHMEDABAD.longitude;
+
+        // 1. Move Map & Blue Dot
+        setMapCenter({ lat: destLat, lng: destLng });
+        setUserLocation({ lat: destLat, lng: destLng });
+        setUserLocName(destName);
+
+        // 2. Draw a new path on the map
+        const newPathCoords = [[startLat, startLng], [destLat, destLng]];
+        setDynamicPaths([{ coords: newPathCoords }]);
+
+        // 3. Trigger AI Route Preview
+        const newJourneyMock = {
+          title: `Route to ${destName}`,
+          start: 'Previous Location',
+          end: destName,
+          route: newPathCoords,
+          segments: [{ street: 'AI Tracking Route...', locality: destName, characteristics: 'Analyzing dynamic path safety.' }]
+        };
+        
+        loadJourneySummary(newJourneyMock);
+
       } else { alert('Location not found.'); }
     } catch (err) { console.error(err); } finally {
       setIsSearching(false);
@@ -176,6 +174,7 @@ const MapScreen = () => {
   const mapSafeZones = showSafeZones ? safeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
   let mapThreats = showThreats ? threats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
   
+  // Inject the Blue Dot
   if (userLocation) {
     mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
   }
@@ -188,18 +187,18 @@ const MapScreen = () => {
         zoom={13}
         threats={mapThreats}
         safeZones={mapSafeZones}
-        safePaths={showPaths ? SAFE_PATHS : []}
+        safePaths={showPaths ? dynamicPaths : []} // Now uses dynamic routes!
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
         pathColor={ICON_COLORS.path}
       />
 
-      {/* ── NEW: Top Left Search Bar (Resized & Relocated) ── */}
+      {/* ── MOVED UP: Search Bar ── */}
       {!isSOSActive && (
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search city, area, or zip..."
+            placeholder="Search destination..."
             placeholderTextColor={C.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -211,21 +210,21 @@ const MapScreen = () => {
         </View>
       )}
 
-      {/* ── RESTORED: Journey Preview at Original Coordinates ── */}
+      {/* ── MOVED UP: Journey Preview Box (Clears SOS Button) ── */}
       {journeySummary && (
-        <View style={{ position: 'absolute', top: 60, right: 20, zIndex: 100 }}>
+        <View style={styles.previewContainer}>
           <JourneySummaryPopup
             summary={journeySummary}
             loading={journeyLoading}
-            onRefresh={loadJourneySummary}
+            onRefresh={() => loadJourneySummary(journeySummary)}
           />
         </View>
       )}
 
       {!isSOSActive && (
         <View style={styles.legend}>
-          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones ({safeZones.length})</Text></View>
-          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats ({threats.length})</Text></View>
+          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones</Text></View>
+          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats</Text></View>
           <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.purple }]} /><Text style={styles.legendLabel}>Safe Paths</Text></View>
         </View>
       )}
@@ -237,7 +236,7 @@ const MapScreen = () => {
             <TouchableOpacity style={styles.locRow} onPress={handleLocateMe} activeOpacity={0.7}>
               <View style={[styles.locDot, isLocating && { backgroundColor: C.teal, shadowColor: C.teal }]} />
               <View>
-                <Text style={styles.locLabel}>MY LOCATION {isLocating && '(Locating...)'}</Text>
+                <Text style={styles.locLabel}>MY LOCATION</Text>
                 <Text style={styles.locName}>{userLocName}</Text>
               </View>
             </TouchableOpacity>
@@ -283,26 +282,33 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', gap: 14 },
   loadingText: { color: C.textSub, fontSize: 13, letterSpacing: 1 },
   
-  // ─── ADJUSTED: Search Bar positioned Top-Left, Decreased Size ───
+  // ─── Negative Top Margin to push into Navigation Header space ───
   searchContainer: {
     position: 'absolute', 
-    top: 15,                     // Aligned closer to the top tab height
-    left: SIDEBAR_W + 20,        // Placed next to the sidebar / Project Guardian logo area
+    top: Platform.OS === 'web' ? -48 : 10,  // Adjusts based on web vs mobile
+    left: SIDEBAR_W + 20,
     width: '100%',
-    maxWidth: 350,               // Decreased size considerably (approx 4-5 cm narrower)
-    height: 38,                  // Slightly slimmer profile
+    maxWidth: 350,
+    height: 38,
     flexDirection: 'row', 
     backgroundColor: C.panel,
     borderRadius: 8, 
     borderWidth: 1, 
     borderColor: C.panelBorder,
-    zIndex: 90, 
-    shadowColor: '#000', 
-    shadowOpacity: 0.5, 
-    shadowRadius: 10,
+    zIndex: 1000, // Forces it over everything
+    elevation: 10,
   },
-  searchInput: { flex: 1, color: C.text, paddingHorizontal: 15, fontSize: 14 },
+  searchInput: { flex: 1, color: C.text, paddingHorizontal: 15, fontSize: 14, outlineStyle: 'none' },
   searchButton: { paddingHorizontal: 15, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderColor: C.panelBorder },
+
+  // ─── Moved Up to avoid SOS Button ───
+  previewContainer: {
+    position: 'absolute', 
+    top: 15, 
+    right: 20, 
+    zIndex: 100,
+    maxHeight: '75%', // Ensures it scrolls instead of hitting the SOS button
+  },
 
   legend: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(14,14,26,0.90)', gap: 16, zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
