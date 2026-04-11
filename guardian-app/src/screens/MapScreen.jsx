@@ -4,8 +4,7 @@
  * Changes in this revision:
  * • Safe zones → teal (#06d6a0) to contrast purple paths + red threats
  * • Safe paths → follow Ahmedabad road grid (right-angle turns, no diagonal cuts)
- * • FAB refresh removed; sidebar refresh button moved to bottom
- * • SOS button → purple theme via updated PanicButton
+ * • JourneySummaryPopup integrated alongside Map layers
  * • Minimalist SVG icons injected directly into Leaflet data props
  *
  * Drop into: src/screens/MapScreen.jsx
