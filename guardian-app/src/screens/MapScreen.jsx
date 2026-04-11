@@ -2,38 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import colors from '../theme/colors';
 import LeafletMap from '../components/LeafletMap';
-import PanicButton from '../components/PanicButton';
 import { getMapOverlay } from '../db/database';
 import { AHMEDABAD } from '../utils/location';
 
-// Mock "Safe Paths" - pre-defined safe walking routes in Ahmedabad
+// ─── NEW EMERGENCY MODULE ──────────────────────────────────────────
+import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
+// ───────────────────────────────────────────────────────────────────
+
 const SAFE_PATHS = [
-  {
-    coords: [
-      [23.0305, 72.5653], // Ellisbridge Police Station
-      [23.0310, 72.5600],
-      [23.0325, 72.5560], // CG Road
-      [23.0330, 72.5570], // Starbucks
-      [23.0365, 72.5463], // Gujarat University
-    ],
-  },
-  {
-    coords: [
-      [23.0242, 72.5720], // VS Hospital
-      [23.0258, 72.5714],
-      [23.0225, 72.5714], // Center
-      [23.0195, 72.5680],
-      [23.0140, 72.5680], // Apollo Pharmacy
-    ],
-  },
-  {
-    coords: [
-      [23.0380, 72.5580], // Navrangpura Fire Station
-      [23.0350, 72.5560],
-      [23.0330, 72.5570], // Starbucks CG Road
-      [23.0305, 72.5653], // Ellisbridge Police
-    ],
-  },
+  { coords: [[23.0305, 72.5653], [23.0310, 72.5600], [23.0325, 72.5560], [23.0330, 72.5570], [23.0365, 72.5463]] },
+  { coords: [[23.0242, 72.5720], [23.0258, 72.5714], [23.0225, 72.5714], [23.0195, 72.5680], [23.0140, 72.5680]] },
+  { coords: [[23.0380, 72.5580], [23.0350, 72.5560], [23.0330, 72.5570], [23.0305, 72.5653]] },
 ];
 
 const MapScreen = () => {
@@ -41,6 +20,9 @@ const MapScreen = () => {
   const [safeZones, setSafeZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showSafePaths, setShowSafePaths] = useState(true);
+
+  // Bring in the SOS State to control the UI
+  const { sosState } = useSOS();
 
   const loadData = useCallback(async () => {
     try {
@@ -99,13 +81,24 @@ const MapScreen = () => {
         safePaths={showSafePaths ? SAFE_PATHS : []}
       />
 
-      {/* Panic Button overlay */}
-      <PanicButton />
-
       {/* Safe spaces FAB */}
       <TouchableOpacity style={styles.safeFab} onPress={loadData}>
         <Text style={styles.safeFabText}>🔄</Text>
       </TouchableOpacity>
+
+      {/* ─── DYNAMIC SOS BUTTON LAYER ─── */}
+      {sosState === SOS_STATE.IDLE ? (
+        // When IDLE: Float in the bottom right corner, scaled down slightly
+        <View style={styles.floatingSOS}>
+          <PanicButton />
+        </View>
+      ) : (
+        // When ACTIVE: Take over the screen with a dark overlay
+        <View style={styles.activeSOSContainer}>
+          <PanicButton />
+        </View>
+      )}
+
     </View>
   );
 };
@@ -142,7 +135,20 @@ const styles = StyleSheet.create({
     alignItems: 'center', borderWidth: 1, borderColor: colors.border,
     zIndex: 100,
   },
-  safeFabText: { fontSize: 20 },
+  // ── NEW STYLES FOR EMERGENCY MODULE ──
+  floatingSOS: {
+    position: 'absolute',
+    bottom: 0, 
+    right: 0,
+    zIndex: 999,
+    transform: [{ scale: 0.75 }], // Scales the 160px button down to ~120px so it fits the map
+  },
+  activeSOSContainer: {
+    ...StyleSheet.absoluteFillObject, // Covers the whole map
+    backgroundColor: 'rgba(13, 13, 13, 0.95)', // 95% opacity black overlay
+    zIndex: 9999, // Stays above everything, including the legend
+    justifyContent: 'center',
+  }
 });
 
 export default MapScreen;
