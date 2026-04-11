@@ -1,6 +1,6 @@
 /**
  * MapScreen.jsx  –  Project Guardian
- * Clean Version: Removed Journey Preview & Fixed Legend Icons
+ * Fixed: Restored Safe Paths, Updated Location Label, & Fixed Web Icons
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -12,7 +12,6 @@ import * as Location from 'expo-location';
 
 import LeafletMap from '../components/LeafletMap';
 import { getMapOverlay } from '../db/database';
-import { AHMEDABAD } from '../utils/location';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
 import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
@@ -26,11 +25,21 @@ const C = {
 const TILE_URL = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png';
 const TILE_ATTRIBUTION = '&copy; Stadia Maps';
 
-// ─── FIXED: LEGEND ROW FOR WEB ───
+// ─── RESTORED: Safe Paths (Mumbai Station to Campus Route) ───
+const SAFE_PATHS = [
+  { 
+    coords: [
+      [19.0798, 72.8988], // Vidyavihar Station
+      [19.0770, 72.8990], 
+      [19.0750, 72.8992], 
+      [19.0730, 72.8995]  // Somaiya Campus
+    ] 
+  }
+];
+
 const LegendRow = ({ icon, label, sub }) => (
   <View style={styles.legendItem}>
     {Platform.OS === 'web' ? (
-      /* Using a raw div for web to properly inject the SVG icon string */
       <div 
         style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
         dangerouslySetInnerHTML={{ __html: icon }} 
@@ -63,9 +72,10 @@ const MapScreen = () => {
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
 
-  const [userLocation, setUserLocation] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude }); 
-  const [mapCenter, setMapCenter] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude });
-  const [userLocName, setUserLocName] = useState('Ahmedabad, GJ');
+  // ─── FIXED: Initialized to Mumbai for your demo ───
+  const [userLocation, setUserLocation] = useState({ lat: 19.0730, lng: 72.8995 }); 
+  const [mapCenter, setMapCenter] = useState({ lat: 19.0730, lng: 72.8995 });
+  const [userLocName, setUserLocName] = useState('Mumbai, MH');
   const [isLocating, setIsLocating] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,8 +108,21 @@ const MapScreen = () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setUserLocation({ lat: location.coords.latitude, lng: location.coords.longitude });
-      setMapCenter({ lat: location.coords.latitude, lng: location.coords.longitude });
+      const lat = location.coords.latitude;
+      const lng = location.coords.longitude;
+      
+      setUserLocation({ lat, lng });
+      setMapCenter({ lat, lng });
+
+      // Dynamic reverse geocoding to fix the label
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+        const data = await res.json();
+        if (data && data.address) {
+          const city = data.address.city || data.address.town || data.address.suburb || 'Mumbai';
+          setUserLocName(`${city}, MH`);
+        }
+      } catch (err) { setUserLocName('Mumbai, MH'); }
     } catch (error) { console.error(error); } finally { setIsLocating(false); }
   };
 
@@ -121,9 +144,10 @@ const MapScreen = () => {
   const handleSelectSuggestion = (item) => {
     Keyboard.dismiss();
     setShowSuggestions(false);
-    setSearchQuery(item.display_name.split(',')[0]); 
+    const name = item.display_name.split(',')[0];
+    setSearchQuery(name); 
     setMapCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lon) });
-    setUserLocation({ lat: parseFloat(item.lat), lng: parseFloat(item.lon) });
+    setUserLocName(`${name}, MH`);
   };
 
   if (loading) {
@@ -153,12 +177,13 @@ const MapScreen = () => {
     <View style={styles.root}>
       <LeafletMap
         center={mapCenter}
-        zoom={14}
+        zoom={15}
         threats={mapThreats}
         safeZones={mapSafeZones}
-        safePaths={showPaths ? [] : []} // Paths removed for clean demo
+        safePaths={showPaths ? SAFE_PATHS : []} 
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
+        pathColor={C.purple}
       />
 
       {!isSOSActive && (
@@ -167,7 +192,7 @@ const MapScreen = () => {
             <View style={styles.searchContainer}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search destination..."
+                placeholder="Search Mumbai..."
                 placeholderTextColor={C.textMuted}
                 value={searchQuery}
                 onChangeText={handleSearchInputChange} 
@@ -204,16 +229,18 @@ const MapScreen = () => {
                   <LegendRow icon={safeZoneIcon('market')} label="Public Market" />
                   <LegendRow icon={safeZoneIcon('home')} label="Safe House" />
                 </View>
-
                 <View style={styles.legendDivider} />
                 <Text style={styles.legendSectionHead}>HAZARDS ({activeThreats.length})</Text>
-                <LegendRow icon={THREAT_ICON(ICON_COLORS.threat)} label="Community Threat" sub="Broken lights / hazards" />
-
+                <LegendRow icon={THREAT_ICON(ICON_COLORS.threat)} label="Community Threat" sub="Unsafe areas" />
                 <View style={styles.legendDivider} />
                 <Text style={styles.legendSectionHead}>NAVIGATION</Text>
                 <View style={styles.legendItem}>
+                   <View style={[styles.legendLine, { backgroundColor: C.purple }]} />
+                   <Text style={[styles.legendLabel, { marginLeft: 8 }]}>AI Safe Path</Text>
+                </View>
+                <View style={styles.legendItem}>
                   <View style={styles.currentLocCircle} />
-                  <Text style={styles.legendLabel}>Your Position</Text>
+                  <Text style={[styles.legendLabel, { marginLeft: 8 }]}>Your Position</Text>
                 </View>
               </View>
             )}
@@ -238,6 +265,7 @@ const MapScreen = () => {
             </View>
             <View style={styles.divider} />
             <Text style={styles.sectionHead}>MAP LAYERS</Text>
+            <LayerToggle label="Safe Paths" icon="🛤️" active={showPaths} onPress={() => setShowPaths(!showPaths)} />
             <LayerToggle label="Threat Zones" icon="🔴" active={showThreats} onPress={() => setShowThreats(!showThreats)} />
             <LayerToggle label="Safe Zones" icon="🟢" active={showSafeZones} onPress={() => setShowSafeZones(!showSafeZones)} />
           </ScrollView>
@@ -252,14 +280,14 @@ const MapScreen = () => {
 const SIDEBAR_W = 220;
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 14 },
-  loadingText: { color: C.textSub, fontSize: 13 },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: C.textSub, fontSize: 13, marginTop: 10 },
   legendBar: { position: 'absolute', top: 0, left: SIDEBAR_W, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15, backgroundColor: C.panel, zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
   searchWrapper: { width: 300, position: 'relative', zIndex: 999 },
   searchContainer: { width: '100%', height: 36, flexDirection: 'row', backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.border },
   searchInput: { flex: 1, color: C.text, paddingHorizontal: 12, fontSize: 13, outlineStyle: 'none' },
   searchButton: { paddingHorizontal: 12, justifyContent: 'center' },
-  suggestionsDropdown: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.panelBorder },
+  suggestionsDropdown: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.panelBorder, overflow: 'hidden' },
   suggestionItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: C.border },
   suggestionTitle: { color: C.text, fontSize: 13 },
   
@@ -269,10 +297,11 @@ const styles = StyleSheet.create({
   legendDropdown: { position: 'absolute', top: 42, right: 0, backgroundColor: C.surface, padding: 16, borderRadius: 8, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 15, elevation: 10, width: 240, gap: 12 },
   legendSectionHead: { color: C.purpleBright, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4 },
   legendGrid: { gap: 8 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center' },
   legendLabel: { color: C.text, fontSize: 12, fontWeight: '600' },
   legendSubLabel: { color: C.textMuted, fontSize: 10 },
   legendDivider: { height: 1, backgroundColor: C.border, marginVertical: 4 },
+  legendLine: { width: 20, height: 3, borderRadius: 2 },
   currentLocCircle: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#4285F4', borderWidth: 2, borderColor: '#fff' },
 
   sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100 },
@@ -294,7 +323,7 @@ const styles = StyleSheet.create({
   statLabel: { color: C.textMuted, fontSize: 8 },
   divider: { height: 1, backgroundColor: C.border },
   sectionHead: { color: C.textMuted, fontSize: 9 },
-  layerRow: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: C.surface, borderRadius: 10, padding: 10 },
+  layerRow: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: C.surface, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: C.border },
   layerIcon: { fontSize: 13 },
   layerLabel: { flex: 1, color: C.textSub, fontSize: 11, fontWeight: '600' },
   pill: { width: 30, height: 17, borderRadius: 9, backgroundColor: C.panelBorder, padding: 2 },
