@@ -1,6 +1,6 @@
 /**
  * MapScreen.jsx  –  Project Guardian
- * Search Bar integrated directly into the Top Legend Bar
+ * Dynamic Location Filtering: Stats drop to 0 if no data is in the current region
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -28,7 +28,6 @@ const C = {
 const TILE_URL = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png';
 const TILE_ATTRIBUTION = '&copy; Stadia Maps';
 
-// Base Paths for initial load
 const SAFE_PATHS = [
   { coords: [ [23.0305, 72.5653], [23.0305, 72.5580], [23.0305, 72.5540], [23.0335, 72.5540], [23.0365, 72.5540], [23.0365, 72.5463] ] }
 ];
@@ -39,8 +38,6 @@ const INITIAL_JOURNEY = {
   segments: [ { street: 'Ashram Road', locality: 'Paldi', characteristics: 'busy stretch' } ]
 };
 
-const MOCK_STATS = { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 };
-
 function ScoreRing({ score }) { return (<View style={styles.ringOuter}><View style={styles.ringInner}><Text style={styles.scoreNum}>{score}</Text><Text style={styles.scoreLabel}>SAFE</Text></View></View>); }
 function StatTile({ icon, value, label, accent }) { return (<View style={[styles.statTile, accent && styles.statTileAccent]}><Text style={styles.statIcon}>{icon}</Text><Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>); }
 function LayerToggle({ label, icon, active, color, onPress }) { const dotColor = color ?? C.purple; return (<TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}><Text style={styles.layerIcon}>{icon}</Text><Text style={[styles.layerLabel, active && { color: dotColor }]}>{label}</Text><View style={[styles.pill, active && { backgroundColor: dotColor }]}><View style={[styles.pillKnob, active && styles.pillKnobOn]} /></View></TouchableOpacity>); }
@@ -50,7 +47,6 @@ const MapScreen = () => {
   const [safeZones, setSafeZones] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Journey & Paths State
   const [journeyLoading, setJourneyLoading] = useState(false);
   const [journeySummary, setJourneySummary] = useState(INITIAL_JOURNEY); 
   const [dynamicPaths, setDynamicPaths] = useState(SAFE_PATHS); 
@@ -64,7 +60,6 @@ const MapScreen = () => {
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
 
-  // GPS & Search State
   const [userLocation, setUserLocation] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude }); 
   const [mapCenter, setMapCenter] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude });
   const [userLocName, setUserLocName] = useState('Ahmedabad, GJ');
@@ -97,26 +92,19 @@ const MapScreen = () => {
 
   useEffect(() => { loadData(); loadJourneySummary(); }, [loadData]);
 
-  // Handle actual GPS hardware with Web Fallback for Reverse Geocoding
   const handleLocateMe = async () => {
     setIsLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Permission to access location was denied');
-        return;
-      }
+      if (status !== 'granted') return;
 
-      // 1. Get Coordinates
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
 
-      // 2. Update Map and Pin instantly
       setUserLocation({ lat, lng });
       setMapCenter({ lat, lng });
 
-      // 3. Reverse Geocode (Try Expo first, fallback to OpenStreetMap for Web)
       try {
         const geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
         if (geocode && geocode.length > 0 && (geocode[0].city || geocode[0].region)) {
@@ -127,28 +115,23 @@ const MapScreen = () => {
         console.log("Expo geocoding failed, trying web fallback...");
       }
 
-      // Web Fallback (Nominatim API)
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
       const data = await res.json();
       
       if (data && data.address) {
-        // Nominatim returns various location types depending on zoom/area
         const city = data.address.city || data.address.town || data.address.suburb || 'Unknown';
         const state = data.address.state || '';
         setUserLocName(`${city}, ${state}`);
       } else {
         setUserLocName('Current Location');
       }
-
     } catch (error) { 
       console.error(error); 
-      setUserLocName('Location Error');
     } finally { 
       setIsLocating(false); 
     }
   };
 
-  // Handle Search (Move Map, Move Blue Dot, Update Journey AI)
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
@@ -201,8 +184,25 @@ const MapScreen = () => {
 
   const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
 
-  const mapSafeZones = showSafeZones ? safeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
-  let mapThreats = showThreats ? threats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
+  // ─── NEW: DYNAMIC DATA FILTERING ───
+  // Checks if the database points are within roughly ~30km of the current map center
+  const isNearby = (lat, lng) => {
+    const threshold = 0.3; // Approx 30km radius in degrees
+    return Math.abs(lat - mapCenter.lat) < threshold && Math.abs(lng - mapCenter.lng) < threshold;
+  };
+
+  const activeSafeZones = safeZones.filter(z => isNearby(z.lat || z.latitude, z.lng || z.longitude));
+  const activeThreats = threats.filter(t => isNearby(t.lat || t.latitude, t.lng || t.longitude));
+
+  const hasLocalData = activeSafeZones.length > 0 || activeThreats.length > 0;
+
+  // Determine dynamic stats
+  const displayStats = hasLocalData 
+    ? { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 } 
+    : { safeScore: 0, nearbyUnits: 0, etaMinutes: 0 };
+
+  const mapSafeZones = showSafeZones ? activeSafeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
+  let mapThreats = showThreats ? activeThreats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
   
   if (userLocation) {
     mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
@@ -222,7 +222,6 @@ const MapScreen = () => {
         pathColor={ICON_COLORS.path}
       />
 
-      {/* ── RESTORED: Journey Preview ── */}
       {journeySummary && (
         <View style={styles.previewContainer}>
           <JourneySummaryPopup
@@ -233,11 +232,8 @@ const MapScreen = () => {
         </View>
       )}
 
-      {/* ── UPDATED: Integrated Legend & Search Bar ── */}
       {!isSOSActive && (
         <View style={styles.legendBar}>
-          
-          {/* Search Input on the Left */}
           <View style={styles.searchContainer}>
             <TextInput
               style={styles.searchInput}
@@ -252,13 +248,11 @@ const MapScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Legend Items on the Right */}
           <View style={styles.legendItemGroup}>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones ({activeSafeZones.length})</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats ({activeThreats.length})</Text></View>
             <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.purple }]} /><Text style={styles.legendLabel}>Safe Paths</Text></View>
           </View>
-
         </View>
       )}
 
@@ -276,12 +270,12 @@ const MapScreen = () => {
 
             <View style={styles.divider} />
             <View style={styles.scoreRow}>
-              <ScoreRing score={MOCK_STATS.safeScore} />
+              <ScoreRing score={displayStats.safeScore} />
               <View style={styles.statsGrid}>
-                <StatTile icon="⚠️" value={threats.length} label="THREATS" />
-                <StatTile icon="🛡️" value={safeZones.length} label="SAFE" accent />
-                <StatTile icon="🚔" value={MOCK_STATS.nearbyUnits} label="UNITS" />
-                <StatTile icon="⏱️" value={`${MOCK_STATS.etaMinutes}m`} label="ETA" />
+                <StatTile icon="⚠️" value={activeThreats.length} label="THREATS" />
+                <StatTile icon="🛡️" value={activeSafeZones.length} label="SAFE" accent />
+                <StatTile icon="🚔" value={displayStats.nearbyUnits} label="UNITS" />
+                <StatTile icon="⏱️" value={`${displayStats.etaMinutes}m`} label="ETA" />
               </View>
             </View>
             <View style={styles.divider} />
@@ -315,48 +309,15 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', gap: 14 },
   loadingText: { color: C.textSub, fontSize: 13, letterSpacing: 1 },
   
-  // ─── INTEGRATED TOP BAR STYLES ───
-  legendBar: {
-    position: 'absolute', 
-    top: 0, 
-    left: SIDEBAR_W, // Starts perfectly after the sidebar
-    right: 0, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', // Search on left, Legend on right
-    paddingVertical: 10, 
-    paddingHorizontal: 20, 
-    backgroundColor: 'rgba(14,14,26,0.95)', // Slightly more opaque
-    zIndex: 50, 
-    borderBottomWidth: 1, 
-    borderBottomColor: C.panelBorder 
-  },
-  
-  searchContainer: {
-    width: 300,
-    height: 36,
-    flexDirection: 'row', 
-    backgroundColor: C.surface, // Blends beautifully with the dark bar
-    borderRadius: 6, 
-    borderWidth: 1, 
-    borderColor: C.border,
-  },
+  legendBar: { position: 'absolute', top: 0, left: SIDEBAR_W, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 20, backgroundColor: 'rgba(14,14,26,0.95)', zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
+  searchContainer: { width: 300, height: 36, flexDirection: 'row', backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.border },
   searchInput: { flex: 1, color: C.text, paddingHorizontal: 12, fontSize: 13, outlineStyle: 'none' },
   searchButton: { paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderColor: C.border },
-
   legendItemGroup: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: { color: C.textSub, fontSize: 11 },
-
-  // ─── Pushed Journey Preview down slightly to clear the thicker top bar ───
-  previewContainer: {
-    position: 'absolute', 
-    top: 70, 
-    right: 20, 
-    zIndex: 100,
-    maxHeight: '75%', 
-  },
+  previewContainer: { position: 'absolute', top: 70, right: 20, zIndex: 100, maxHeight: '75%' },
 
   sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100, ...Platform.select({ ios: {}, android: { elevation: 12 } }) },
   sidebarContent: { paddingTop: 48, paddingHorizontal: 14, paddingBottom: 8, gap: 14 },
