@@ -84,6 +84,27 @@ const ReportScreen = ({ navigation }) => {
     }
   };
 
+  const handleAddPhoto = () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose a source for your photo',
+      [
+        {
+          text: 'Take Photo',
+          onPress: takePhoto,
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: pickPhoto,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   const pickPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -170,16 +191,10 @@ const ReportScreen = ({ navigation }) => {
               </TouchableOpacity>
             </>
           ) : (
-            <View style={styles.photoButtonGroup}>
-              <TouchableOpacity style={[styles.photoBtn, styles.cameraBtnStyle]} onPress={takePhoto}>
-                <Text style={styles.photoBtnIcon}>📷</Text>
-                <Text style={styles.photoBtnText}>Take Photo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.photoBtn, styles.galleryBtnStyle]} onPress={pickPhoto}>
-                <Text style={styles.photoBtnIcon}>🖼️</Text>
-                <Text style={styles.photoBtnText}>Choose from Gallery</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.photoBtn} onPress={handleAddPhoto}>
+              <Text style={styles.photoBtnIcon}>📸</Text>
+              <Text style={styles.photoBtnText}>Add Photo</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -285,19 +300,16 @@ const styles = StyleSheet.create({
   },
   submitText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
   photoContainer: { marginTop: 10 },
-  photoButtonGroup: { flexDirection: 'row', gap: 10 },
   photoBtn: {
-    flex: 1, borderRadius: 8, padding: 14, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.safe, borderRadius: 8, padding: 14, alignItems: 'center', justifyContent: 'center',
   },
-  cameraBtnStyle: { backgroundColor: colors.warning },
-  galleryBtnStyle: { backgroundColor: colors.safe },
   photoBtnIcon: { fontSize: 24, marginBottom: 4 },
-  photoBtnText: { color: colors.bg, fontSize: 12, fontWeight: '600' },
-  photoPreview: { width: '100%', height: 180, borderRadius: 10, marginBottom: 10 },
+  photoBtnText: { color: colors.bg, fontSize: 14, fontWeight: '600' },
+  photoPreview: { width: '100%', height: 200, borderRadius: 10, marginBottom: 10 },
   removePhotoBtn: {
-    backgroundColor: colors.threat, borderRadius: 8, padding: 10, alignItems: 'center',
+    backgroundColor: colors.threat, borderRadius: 8, padding: 12, alignItems: 'center',
   },
-  removePhotoText: { color: colors.bg, fontSize: 14, fontWeight: '600' },
+  removePhotoText: { color: colors.bg, fontSize: 13, fontWeight: '600' },
 });
 
 export default ReportScreen;
