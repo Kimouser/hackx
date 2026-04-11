@@ -42,9 +42,9 @@ const ThreatCard = ({ report, onUpvote }) => {
       ) : null}
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.upvoteBtn} onPress={() => onUpvote?.(report.id)}>
-          <Text style={styles.upvoteArrow}>▲</Text>
-          <Text style={styles.upvoteCount}>{report.upvotes}</Text>
+        <TouchableOpacity style={[styles.upvoteBtn, report.userUpvoted && styles.upvotedBtn]} onPress={() => onUpvote?.(report.id)}>
+          <Text style={[styles.upvoteArrow, report.userUpvoted && styles.upvotedArrow]}>{report.userUpvoted ? '▼' : '▲'}</Text>
+          <Text style={[styles.upvoteCount, report.userUpvoted && styles.upvotedCount]}>{report.upvotes}</Text>
         </TouchableOpacity>
 
         <Text style={styles.time}>
@@ -124,15 +124,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 6,
   },
+  upvotedBtn: {
+    backgroundColor: colors.threatDim,
+  },
   upvoteArrow: {
     color: colors.safe,
     fontSize: 14,
     fontWeight: 'bold',
   },
+  upvotedArrow: {
+    color: colors.threat,
+  },
   upvoteCount: {
     color: colors.safe,
     fontSize: 14,
     fontWeight: '700',
+  },
+  upvotedCount: {
+    color: colors.threat,
   },
   time: {
     color: colors.textMuted,

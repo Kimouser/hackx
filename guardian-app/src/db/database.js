@@ -13,8 +13,10 @@ import { SEED_REPORTS, SEED_SAFE_ZONES } from './seed';
 let reports = [];
 let safeZones = [];
 let emergencyLogs = [];
+let users = [];
 let nextReportId = 1;
 let nextLogId = 1;
+let nextUserId = 1;
 let initialized = false;
 
 // ─── Init & Seed ───
@@ -26,6 +28,7 @@ export const getDatabase = async () => {
   reports = SEED_REPORTS.map((r, i) => ({
     id: i + 1,
     ...r,
+    userUpvoted: false,
     created_at: new Date().toISOString(),
   }));
   nextReportId = reports.length + 1;
@@ -45,7 +48,7 @@ export const getDatabase = async () => {
 export const getAllReports = async () => {
   return [...reports]
     .filter((r) => r.status !== 'resolved')
-    .sort((a, b) => b.upvotes - a.upvotes);
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 };
 
 export const getReportsForMap = async () => {
@@ -78,6 +81,7 @@ export const createReport = async ({ title, description, category, severity, lat
     municipal_email_sent: 0,
     municipal_email_date: null,
     image_uri: '',
+    userUpvoted: false,
     created_at: new Date().toISOString(),
   };
   reports.push(report);
@@ -89,18 +93,52 @@ export const upvoteReport = async (id) => {
   const report = reports.find((r) => r.id === id);
   if (!report) throw new Error('Report not found');
 
-  report.upvotes += 1;
+  if (!report.userUpvoted) {
+    report.upvotes += 1;
+    report.userUpvoted = true;
 
-  // Municipal Loop: auto-trigger at 10 upvotes
-  if (report.upvotes >= 10 && !report.municipal_email_sent) {
-    report.municipal_email_sent = 1;
-    report.municipal_email_date = new Date().toISOString();
-    report.status = 'municipal_notified';
-    console.log(`[Guardian DB] Municipal Loop triggered for report #${id}`);
-    return { ...report, municipalTriggered: true };
+    // Municipal Loop: auto-trigger at 10 upvotes
+    if (report.upvotes >= 10 && !report.municipal_email_sent) {
+      report.municipal_email_sent = 1;
+      report.municipal_email_date = new Date().toISOString();
+      report.status = 'municipal_notified';
+      console.log(`[Guardian DB] Municipal Loop triggered for report #${id}`);
+      return { ...report, municipalTriggered: true };
+    }
+  } else {
+    report.upvotes = Math.max(0, report.upvotes - 1);
+    report.userUpvoted = false;
   }
 
   return { ...report, municipalTriggered: false };
+};
+
+// ─── User CRUD ───
+export const createUser = async ({ name, email, password, role, aadhar, area }) => {
+  const existing = users.find(u => u.email === email);
+  if (existing) throw new Error('User already exists');
+
+  const id = nextUserId++;
+  const user = {
+    id,
+    name,
+    email,
+    password, // In real app, hash this
+    role, // 'user' or 'volunteer'
+    aadhar: role === 'volunteer' ? aadhar : null,
+    area: role === 'volunteer' ? area : null,
+    created_at: new Date().toISOString(),
+  };
+  users.push(user);
+  console.log(`[Guardian DB] New user #${id}: ${name} (${role})`);
+  return { ...user, password: undefined };
+};
+
+export const loginUser = async ({ name, email, password, role }) => {
+  const user = users.find(u => u.email === email && u.password === password && u.role === role);
+  if (!user) throw new Error('Invalid credentials');
+  console.log(`[Guardian DB] Login: ${user.name}`);
+  return { ...user, password: undefined };
 };
 
 // ─── SafeZone Queries ───

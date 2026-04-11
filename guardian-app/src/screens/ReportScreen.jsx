@@ -23,7 +23,7 @@ const SEVERITIES = [
   { key: 'critical', color: colors.threat },
 ];
 
-const ReportScreen = () => {
+const ReportScreen = ({ navigation }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -66,7 +66,7 @@ const ReportScreen = () => {
       Alert.alert(
         '✓ Report Submitted',
         'Your report has been saved locally and the Municipal Loop has been notified.\n\nThe community can now upvote this on the Dashboard.',
-        [{ text: 'Great!' }]
+        [{ text: 'View on Dashboard', onPress: () => navigation.navigate('Dashboard') }]
       );
 
       // Reset form
