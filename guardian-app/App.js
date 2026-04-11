@@ -6,6 +6,13 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { getDatabase } from './src/db/database';
 import colors from './src/theme/colors';
 
+// ─── STEP 1: ADD TEST TOGGLE ──────────────────────────────────────────
+// Set this to true to see the SOS Button. Set to false for your Map.
+const TEST_MODE = true; 
+
+import ExampleScreen from './src/screens/ExampleScreen'; 
+// ───────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [dbReady, setDbReady] = useState(false);
 
@@ -22,6 +29,7 @@ export default function App() {
     init();
   }, []);
 
+  // Keep your splash screen active while DB loads
   if (!dbReady) {
     return (
       <View style={styles.splash}>
@@ -37,7 +45,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <AppNavigator />
+      
+      {/* ─── STEP 2: RENDER SWITCH ─── */}
+      {TEST_MODE ? (
+        <ExampleScreen />
+      ) : (
+        <AppNavigator />
+      )}
     </SafeAreaProvider>
   );
 }
