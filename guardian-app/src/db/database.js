@@ -66,7 +66,7 @@ export const getReportsForMap = async () => {
     }));
 };
 
-export const createReport = async ({ title, description, category, severity, latitude, longitude }) => {
+export const createReport = async ({ title, description, category, severity, latitude, longitude, imageUri }) => {
   const id = nextReportId++;
   const report = {
     id,
@@ -80,7 +80,7 @@ export const createReport = async ({ title, description, category, severity, lat
     status: 'active',
     municipal_email_sent: 0,
     municipal_email_date: null,
-    image_uri: '',
+    image_uri: imageUri || '',
     userUpvoted: false,
     created_at: new Date().toISOString(),
   };

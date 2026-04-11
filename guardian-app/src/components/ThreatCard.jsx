@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import colors from '../theme/colors';
 
 const severityColors = {
@@ -39,6 +39,9 @@ const ThreatCard = ({ report, onUpvote }) => {
       <Text style={styles.title}>{report.title}</Text>
       {report.description ? (
         <Text style={styles.desc} numberOfLines={2}>{report.description}</Text>
+      ) : null}
+      {report.image_uri ? (
+        <Image source={{ uri: report.image_uri }} style={styles.photo} resizeMode="cover" />
       ) : null}
 
       <View style={styles.footer}>
@@ -108,6 +111,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
     marginBottom: 8,
+  },
+  photo: {
+    width: '100%',
+    height: 170,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: colors.surface,
   },
   footer: {
     flexDirection: 'row',

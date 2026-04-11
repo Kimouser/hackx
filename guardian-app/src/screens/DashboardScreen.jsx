@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  View, Text, StyleSheet, FlatList, RefreshControl, Alert, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, RefreshControl, Alert, TouchableOpacity, Image,
 } from 'react-native';
 import colors from '../theme/colors';
 import ThreatCard from '../components/ThreatCard';
@@ -52,6 +52,9 @@ const DashboardScreen = () => {
 
   const activeCount = reports.filter((r) => r.status === 'active').length;
   const escalatedCount = reports.filter((r) => r.status !== 'active').length;
+  const reportsWithPhotos = reports
+    .filter((r) => r.image_uri && r.image_uri.trim() !== '')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   const filteredReports = filter === 'all' ? reports : filter === 'active' ? reports.filter(r => r.status === 'active') : reports.filter(r => r.status !== 'active');
 
@@ -80,6 +83,34 @@ const DashboardScreen = () => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Photo Gallery */}
+      {reportsWithPhotos.length > 0 && (
+        <View style={styles.photoSection}>
+          <View style={styles.photoHeaderRow}>
+            <Text style={styles.photoSectionTitle}>📸 Community Photos</Text>
+            <Text style={styles.photoSectionSub}>{reportsWithPhotos.length} recent uploads</Text>
+          </View>
+          <FlatList
+            data={reportsWithPhotos}
+            keyExtractor={(item) => String(item.id)}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.photoItem} onPress={() => {
+                Alert.alert(item.title, item.description || 'No description');
+              }}>
+                <Image source={{ uri: item.image_uri }} style={styles.photoThumbnail} />
+                <View style={styles.photoOverlay}>
+                  <Text style={styles.photoTitle} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.photoUpvotes}>▲ {item.upvotes}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={styles.photoList}
+          />
+        </View>
+      )}
 
       {/* Report List */}
       <FlatList
@@ -125,6 +156,59 @@ const styles = StyleSheet.create({
   },
   statNum: { fontSize: 22, fontWeight: '700', color: colors.textPrimary },
   statLabel: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  photoSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  photoSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  photoSectionSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  photoHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  photoList: {
+    paddingRight: 20,
+  },
+  photoItem: {
+    width: 120,
+    height: 120,
+    marginRight: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
+  photoThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  photoOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 8,
+  },
+  photoTitle: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  photoUpvotes: {
+    color: colors.safe,
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
   list: { padding: 16, paddingTop: 4 },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
