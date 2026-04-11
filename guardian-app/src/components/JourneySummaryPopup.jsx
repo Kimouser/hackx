@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Animated, ScrollView } from 'react-native';
 import colors from '../theme/colors';
 
 const JourneySummaryPopup = ({ summary, loading, onRefresh }) => {
@@ -42,36 +42,44 @@ const JourneySummaryPopup = ({ summary, loading, onRefresh }) => {
         </TouchableOpacity>
       </TouchableOpacity>
 
-      {/* Expanded Content - Animated */}
+      {/* Expanded Content - Animated with ScrollView */}
       <Animated.View style={[styles.expandedContent, { opacity: contentOpacity }]}>
-        <View style={styles.headerRow}>
-          <Text style={styles.heading}>Route Analysis</Text>
-          <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.safe} />
-            ) : (
-              <Text style={styles.refreshLabel}>⟳</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        <ScrollView 
+          scrollEnabled={isExpanded} 
+          nestedScrollEnabled={true}
+          showsVerticalScrollIndicator={true}
+          scrollIndicatorInsets={{ right: 0 }}
+          style={styles.scrollableContent}
+        >
+          <View style={styles.headerRow}>
+            <Text style={styles.heading}>Route Analysis</Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.safe} />
+              ) : (
+                <Text style={styles.refreshLabel}>⟳</Text>
+              )}
+            </TouchableOpacity>
+          </View>
 
-        <Text style={styles.sectionTitle}>Overall</Text>
-        <Text style={styles.sectionText}>{summary.overall}</Text>
+          <Text style={styles.sectionTitle}>Overall</Text>
+          <Text style={styles.sectionText}>{summary.overall}</Text>
 
-        <Text style={styles.sectionTitle}>Road / Plot Holes</Text>
-        <Text style={styles.sectionText}>{summary.plotHoles}</Text>
+          <Text style={styles.sectionTitle}>Road / Plot Holes</Text>
+          <Text style={styles.sectionText}>{summary.plotHoles}</Text>
 
-        <Text style={styles.sectionTitle}>Street Lights</Text>
-        <Text style={styles.sectionText}>{summary.streetLights}</Text>
+          <Text style={styles.sectionTitle}>Street Lights</Text>
+          <Text style={styles.sectionText}>{summary.streetLights}</Text>
 
-        <Text style={styles.sectionTitle}>Localities</Text>
-        <Text style={styles.sectionText}>{summary.localities}</Text>
+          <Text style={styles.sectionTitle}>Localities</Text>
+          <Text style={styles.sectionText}>{summary.localities}</Text>
 
-        <Text style={styles.sectionTitle}>Busyness</Text>
-        <Text style={styles.sectionText}>{summary.busyness}</Text>
+          <Text style={styles.sectionTitle}>Busyness</Text>
+          <Text style={styles.sectionText}>{summary.busyness}</Text>
 
-        <Text style={styles.adviceLabel}>Advice</Text>
-        <Text style={styles.adviceText}>{summary.advice}</Text>
+          <Text style={styles.adviceLabel}>Advice</Text>
+          <Text style={styles.adviceText}>{summary.advice}</Text>
+        </ScrollView>
       </Animated.View>
     </Animated.View>
   );
@@ -140,11 +148,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
+  scrollableContent: {
+    flex: 1,
+    paddingHorizontal: 0,
+    paddingTop: 8,
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    paddingHorizontal: 16,
   },
   heading: {
     color: colors.safe,
@@ -171,22 +185,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     marginTop: 8,
+    paddingHorizontal: 16,
   },
   sectionText: {
     color: colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
+    paddingHorizontal: 16,
   },
   adviceLabel: {
     color: colors.safe,
     fontSize: 12,
     fontWeight: '700',
     marginTop: 10,
+    paddingHorizontal: 16,
   },
   adviceText: {
     color: colors.textPrimary,
     fontSize: 13,
     lineHeight: 18,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
 });
 
