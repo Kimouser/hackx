@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import colors from '../theme/colors';
 import LeafletMap from '../components/LeafletMap';
+import JourneySummaryPopup from '../components/JourneySummaryPopup';
 import { getMapOverlay } from '../db/database';
 import { AHMEDABAD } from '../utils/location';
+import { summarizeJourney } from '../services/journeyAI';
 
 // ─── NEW EMERGENCY MODULE ──────────────────────────────────────────
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
@@ -15,10 +17,36 @@ const SAFE_PATHS = [
   { coords: [[23.0380, 72.5580], [23.0350, 72.5560], [23.0330, 72.5570], [23.0305, 72.5653]] },
 ];
 
+const CURRENT_JOURNEY = {
+  title: 'Paldi to SG Highway Safety Preview',
+  start: 'Paldi Market',
+  end: 'SG Highway Service Road',
+  route: SAFE_PATHS[0].coords,
+  segments: [
+    {
+      street: 'Ashram Road',
+      locality: 'Paldi',
+      characteristics: 'busy commercial stretch with shopping and light traffic',
+    },
+    {
+      street: 'Navrangpura Road',
+      locality: 'Navrangpura',
+      characteristics: 'wider boulevard with moderate traffic and better lighting',
+    },
+    {
+      street: 'SG Highway Service Road',
+      locality: 'Thaltej',
+      characteristics: 'quieter outer stretch with pockets of dim street lighting',
+    },
+  ],
+};
+
 const MapScreen = () => {
   const [threats, setThreats] = useState([]);
   const [safeZones, setSafeZones] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeySummary, setJourneySummary] = useState(null);
   const [showSafePaths, setShowSafePaths] = useState(true);
 
   // Bring in the SOS State to control the UI
@@ -39,7 +67,20 @@ const MapScreen = () => {
 
   useEffect(() => {
     loadData();
+    loadJourneySummary();
   }, [loadData]);
+
+  const loadJourneySummary = async () => {
+    setJourneyLoading(true);
+    try {
+      const summary = await summarizeJourney(CURRENT_JOURNEY);
+      setJourneySummary(summary);
+    } catch (error) {
+      console.error('Failed to load journey summary:', error);
+    } finally {
+      setJourneyLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -79,6 +120,13 @@ const MapScreen = () => {
         threats={threats}
         safeZones={safeZones}
         safePaths={showSafePaths ? SAFE_PATHS : []}
+        journeyRoute={CURRENT_JOURNEY.route}
+      />
+
+      <JourneySummaryPopup
+        summary={journeySummary}
+        loading={journeyLoading}
+        onRefresh={loadJourneySummary}
       />
 
       {/* Safe spaces FAB */}

@@ -13,9 +13,10 @@ import colors from '../theme/colors';
  *  - threats: [{ id, title, category, severity, latitude, longitude, upvotes }]
  *  - safeZones: [{ id, name, category, latitude, longitude, phone }]
  *  - safePaths: [{ coords: [[lat,lng],[lat,lng],...] }]
+ *  - journeyRoute: [[lat,lng],[lat,lng],...]
  *  - onMarkerPress: (type, item) => void
  */
-const LeafletMap = ({ center, zoom = 13, threats = [], safeZones = [], safePaths = [] }) => {
+const LeafletMap = ({ center, zoom = 13, threats = [], safeZones = [], safePaths = [], journeyRoute = [] }) => {
   const iframeRef = useRef(null);
 
   const severityColor = {
@@ -136,6 +137,16 @@ const LeafletMap = ({ center, zoom = 13, threats = [], safeZones = [], safePaths
 
         // Safe zones
         ${safeMarkers}
+
+        // Journey route line
+        ${journeyRoute && journeyRoute.length ? `
+        L.polyline(${JSON.stringify(journeyRoute)}, {
+          color: '#3399ff',
+          weight: 5,
+          opacity: 0.9,
+          dashArray: '8,6'
+        }).addTo(map).bindPopup('<div style="font-family:system-ui;color:#fff">🚗 Planned journey route</div>');
+        ` : ''}
 
         // Safe paths (glowing green lines)
         ${safePathLines}
