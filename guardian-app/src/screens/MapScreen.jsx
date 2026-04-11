@@ -1,11 +1,5 @@
 /**
- * MapScreen.jsx  –  Project Guardian (All-In-One Edition)
- *
- * Includes:
- * • Minimalist SVG rendering
- * • Live Device GPS tracking (expo-location)
- * • OpenStreetMap Search Geocoding (Nominatim API)
- * • Sidebar & Threat Data
+ * MapScreen.jsx  –  Project Guardian (Demo Ready)
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -13,7 +7,7 @@ import {
   View, Text, StyleSheet, ActivityIndicator, TouchableOpacity,
   ScrollView, Animated, Platform, TextInput, Keyboard
 } from 'react-native';
-import * as Location from 'expo-location'; // <-- Added for GPS
+import * as Location from 'expo-location';
 
 import LeafletMap from '../components/LeafletMap';
 import JourneySummaryPopup from '../components/JourneySummaryPopup';
@@ -21,7 +15,9 @@ import { getMapOverlay } from '../db/database';
 import { AHMEDABAD } from '../utils/location';
 import { summarizeJourney } from '../services/journeyAI';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
-import { ICON_COLORS, safeZoneIcon, THREAT_ICON } from '../modules/map/MapIcons';
+
+// ─── ADD CURRENT_LOCATION_ICON HERE ───
+import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
 const C = {
   bg: '#080810', panel: 'rgba(14,14,26,0.95)', panelBorder: '#1e1e35',
@@ -47,8 +43,7 @@ const CURRENT_JOURNEY = {
 
 const MOCK_STATS = { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 };
 
-// --- Subcomponents ---
-function ScoreRing({ score }) {
+function ScoreRing({ score }) { /* ... Keep existing ... */ 
   return (
     <View style={styles.ringOuter}>
       <View style={styles.ringInner}>
@@ -59,7 +54,7 @@ function ScoreRing({ score }) {
   );
 }
 
-function StatTile({ icon, value, label, accent }) {
+function StatTile({ icon, value, label, accent }) { /* ... Keep existing ... */
   return (
     <View style={[styles.statTile, accent && styles.statTileAccent]}>
       <Text style={styles.statIcon}>{icon}</Text>
@@ -67,9 +62,9 @@ function StatTile({ icon, value, label, accent }) {
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
-}
+ }
 
-function LayerToggle({ label, icon, active, color, onPress }) {
+function LayerToggle({ label, icon, active, color, onPress }) { /* ... Keep existing ... */
   const dotColor = color ?? C.purple;
   return (
     <TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}>
@@ -78,43 +73,38 @@ function LayerToggle({ label, icon, active, color, onPress }) {
       <View style={[styles.pill, active && { backgroundColor: dotColor }]}><View style={[styles.pillKnob, active && styles.pillKnobOn]} /></View>
     </TouchableOpacity>
   );
-}
+ }
 
-// --- Main Screen ---
 const MapScreen = () => {
-  // Map Data State
   const [threats, setThreats] = useState([]);
   const [safeZones, setSafeZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [journeyLoading, setJourneyLoading] = useState(false);
   const [journeySummary, setJourneySummary] = useState(null);
-  
-  // Layer Toggles
   const [showPaths, setShowPaths] = useState(true);
   const [showThreats, setShowThreats] = useState(true);
   const [showSafeZones, setShowSafeZones] = useState(true);
-  
-  // UI State
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
   const sidebarAnim = useRef(new Animated.Value(1)).current;
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
 
-  // --- NEW: Location & Search State ---
-  const [mapCenter, setMapCenter] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude });
+  // ─── DEMO MODE GPS LOGIC ───
+  // We start with a mock location in Ahmedabad for the demo
+  const [userLocation, setUserLocation] = useState({ lat: 23.0225, lng: 72.5714 }); 
+  const [mapCenter, setMapCenter] = useState({ lat: 23.0225, lng: 72.5714 });
   const [userLocName, setUserLocName] = useState('Ahmedabad, GJ');
   const [isLocating, setIsLocating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
-  // Toggle Sidebar Animation
   const toggleSidebar = useCallback(() => {
     const next = sidebarOpen ? 0 : 1;
     Animated.spring(sidebarAnim, { toValue: next, tension: 80, friction: 12, useNativeDriver: true }).start();
     setSidebarOpen(p => !p);
   }, [sidebarOpen]);
 
-  // Load Database
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -134,7 +124,7 @@ const MapScreen = () => {
 
   useEffect(() => { loadData(); loadJourneySummary(); }, [loadData]);
 
-  // --- NEW: GPS Hardware Locator ---
+  // Real GPS fetcher (Will override mock data when clicked)
   const handleLocateMe = async () => {
     setIsLocating(true);
     try {
@@ -145,45 +135,33 @@ const MapScreen = () => {
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
 
-      // Update Map Center
+      setUserLocation({ lat, lng });
       setMapCenter({ lat, lng });
 
-      // Reverse Geocode for City Name
       const geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
       if (geocode.length > 0) {
         setUserLocName(`${geocode[0].city || geocode[0].subregion}, ${geocode[0].region}`);
       } else {
         setUserLocName('Current Location');
       }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLocating(false);
-    }
+    } catch (error) { console.error(error); } finally { setIsLocating(false); }
   };
 
-  // --- NEW: Search/Geocoding API ---
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
-    Keyboard.dismiss(); // Hide keyboard
+    Keyboard.dismiss();
 
     try {
-      // Use free OpenStreetMap API to find coordinates
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
       
       if (data && data.length > 0) {
         setMapCenter({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
-        // Don't override the "My Location" text with search text, just move the map
-      } else {
-        alert('Location not found. Try a broader search.');
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
+      } else { alert('Location not found.'); }
+    } catch (err) { console.error(err); } finally {
       setIsSearching(false);
-      setSearchQuery(''); // Clear bar after search
+      setSearchQuery(''); 
     }
   };
 
@@ -198,17 +176,27 @@ const MapScreen = () => {
 
   const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
 
-  // SVG Injectors
+  // Add the User Location Pin to the map data alongside zones and threats
   const mapSafeZones = showSafeZones ? safeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
   const mapThreats = showThreats ? threats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
+  
+  // Create an array with just the user location marker
+  const userMarkerData = [{
+      lat: userLocation.lat,
+      lng: userLocation.lng,
+      svgHtml: CURRENT_LOCATION_ICON()
+  }];
+
+  // We combine the user marker with threats so it renders via LeafletMap easily
+  const combinedMapMarkers = [...mapThreats, ...userMarkerData];
 
   return (
     <View style={styles.root}>
 
       <LeafletMap
-        center={mapCenter} // <-- Now dynamic!
+        center={mapCenter}
         zoom={13}
-        threats={mapThreats}
+        threats={combinedMapMarkers} // Pass threats + user location
         safeZones={mapSafeZones}
         safePaths={showPaths ? SAFE_PATHS : []}
         tileUrl={TILE_URL}
@@ -216,7 +204,7 @@ const MapScreen = () => {
         pathColor={ICON_COLORS.path}
       />
 
-      {/* --- NEW: Floating Search Bar --- */}
+      {/* ── NEW: Top Center Search Bar ── */}
       {!isSOSActive && (
         <View style={styles.searchContainer}>
           <TextInput
@@ -233,7 +221,14 @@ const MapScreen = () => {
         </View>
       )}
 
-      {journeySummary && <JourneySummaryPopup summary={journeySummary} loading={journeyLoading} onRefresh={loadJourneySummary} />}
+      {/* ── RESTORED: Journey Preview ── */}
+      {journeySummary && (
+        <JourneySummaryPopup
+          summary={journeySummary}
+          loading={journeyLoading}
+          onRefresh={loadJourneySummary}
+        />
+      )}
 
       {!isSOSActive && (
         <View style={styles.legend}>
@@ -247,7 +242,6 @@ const MapScreen = () => {
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: panelTranslate }] }]}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarContent}>
             
-            {/* --- NEW: Clickable Location Row --- */}
             <TouchableOpacity style={styles.locRow} onPress={handleLocateMe} activeOpacity={0.7}>
               <View style={[styles.locDot, isLocating && { backgroundColor: C.teal, shadowColor: C.teal }]} />
               <View>
@@ -297,16 +291,27 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', gap: 14 },
   loadingText: { color: C.textSub, fontSize: 13, letterSpacing: 1 },
   
-  // --- NEW: Search Bar Styles ---
+  // ─── ADJUSTED: Search Bar positioned Top Center ───
   searchContainer: {
-    position: 'absolute', top: 50, right: 20, left: SIDEBAR_W + 40, // Avoids sidebar
-    flexDirection: 'row', backgroundColor: C.panel,
-    borderRadius: 8, borderWidth: 1, borderColor: C.panelBorder,
-    zIndex: 90, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 10,
-    ...Platform.select({ web: { maxWidth: 400, marginLeft: 'auto' }}) // Keeps it tidy on Web
+    position: 'absolute', 
+    top: 50, 
+    left: '50%',                     // Center horizontally
+    transform: [{ translateX: -300 }], // Offset by half the width to truly center it
+    width: '100%',
+    maxWidth: 600,                   // Kept slightly smaller than 980px so it doesn't overlap sidebar/preview
+    height: 40,                      // Close to the ~30px you requested
+    flexDirection: 'row', 
+    backgroundColor: C.panel,
+    borderRadius: 8, 
+    borderWidth: 1, 
+    borderColor: C.panelBorder,
+    zIndex: 90, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.5, 
+    shadowRadius: 10,
   },
-  searchInput: { flex: 1, color: C.text, paddingHorizontal: 15, paddingVertical: 10, fontSize: 14 },
-  searchButton: { padding: 10, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderColor: C.panelBorder },
+  searchInput: { flex: 1, color: C.text, paddingHorizontal: 15, fontSize: 14 },
+  searchButton: { paddingHorizontal: 15, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderColor: C.panelBorder },
 
   legend: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(14,14,26,0.90)', gap: 16, zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
