@@ -85,7 +85,6 @@ const CURRENT_JOURNEY = {
 };
 
 const MOCK_STATS = { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 };
->>>>>>> feature_mapimprov
 
 function ScoreRing({ score }) {
   return (
@@ -159,7 +158,6 @@ const MapScreen = () => {
     }
   }, []);
 
-<<<<<<< HEAD
   useEffect(() => {
     loadData();
     loadJourneySummary();
