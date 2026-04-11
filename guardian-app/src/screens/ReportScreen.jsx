@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ScrollView, KeyboardAvoidingView, Platform,
+  Alert, ScrollView, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import colors from '../theme/colors';
 import { createReport } from '../db/database';
 import { sendMunicipalEmail } from '../services/municipalService';
@@ -29,6 +30,7 @@ const ReportScreen = ({ navigation }) => {
   const [category, setCategory] = useState('');
   const [severity, setSeverity] = useState('medium');
   const [submitting, setSubmitting] = useState(false);
+  const [photoUri, setPhotoUri] = useState(null);
 
   const handleSubmit = async () => {
     if (!title.trim()) {
@@ -74,10 +76,52 @@ const ReportScreen = ({ navigation }) => {
       setDescription('');
       setCategory('');
       setSeverity('medium');
+      setPhotoUri(null);
     } catch (error) {
       Alert.alert('Error', 'Failed to submit report: ' + error.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const pickPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera roll permission is required to add photos.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        setPhotoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick photo: ' + error.message);
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        setPhotoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to take photo: ' + error.message);
     }
   };
 
@@ -114,6 +158,30 @@ const ReportScreen = ({ navigation }) => {
           numberOfLines={4}
           textAlignVertical="top"
         />
+
+        {/* Photo Capture */}
+        <Text style={styles.label}>Photo Evidence</Text>
+        <View style={styles.photoContainer}>
+          {photoUri ? (
+            <>
+              <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+              <TouchableOpacity style={styles.removePhotoBtn} onPress={() => setPhotoUri(null)}>
+                <Text style={styles.removePhotoText}>✕ Remove Photo</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={styles.photoButtonGroup}>
+              <TouchableOpacity style={[styles.photoBtn, styles.cameraBtnStyle]} onPress={takePhoto}>
+                <Text style={styles.photoBtnIcon}>📷</Text>
+                <Text style={styles.photoBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.photoBtn, styles.galleryBtnStyle]} onPress={pickPhoto}>
+                <Text style={styles.photoBtnIcon}>🖼️</Text>
+                <Text style={styles.photoBtnText}>Choose from Gallery</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         {/* Category */}
         <Text style={styles.label}>Category *</Text>
@@ -216,6 +284,20 @@ const styles = StyleSheet.create({
     padding: 16, alignItems: 'center', marginTop: 20,
   },
   submitText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
+  photoContainer: { marginTop: 10 },
+  photoButtonGroup: { flexDirection: 'row', gap: 10 },
+  photoBtn: {
+    flex: 1, borderRadius: 8, padding: 14, alignItems: 'center', justifyContent: 'center',
+  },
+  cameraBtnStyle: { backgroundColor: colors.warning },
+  galleryBtnStyle: { backgroundColor: colors.safe },
+  photoBtnIcon: { fontSize: 24, marginBottom: 4 },
+  photoBtnText: { color: colors.bg, fontSize: 12, fontWeight: '600' },
+  photoPreview: { width: '100%', height: 180, borderRadius: 10, marginBottom: 10 },
+  removePhotoBtn: {
+    backgroundColor: colors.threat, borderRadius: 8, padding: 10, alignItems: 'center',
+  },
+  removePhotoText: { color: colors.bg, fontSize: 14, fontWeight: '600' },
 });
 
 export default ReportScreen;
