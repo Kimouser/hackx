@@ -33,6 +33,7 @@ const ReportScreen = ({ navigation }) => {
   const [photoUri, setPhotoUri] = useState(null);
 
   const handleSubmit = async () => {
+    console.log('[ReportScreen] Submit pressed');
     if (!title.trim()) {
       Alert.alert('Missing Info', 'Please enter a title for the report.');
       return;
@@ -44,6 +45,7 @@ const ReportScreen = ({ navigation }) => {
 
     setSubmitting(true);
     try {
+      console.log('[ReportScreen] Creating report with:', { title, description, category, severity, photoUri });
       const reportId = await createReport({
         title: title.trim(),
         description: description.trim(),
@@ -53,6 +55,8 @@ const ReportScreen = ({ navigation }) => {
         longitude: AHMEDABAD.longitude + (Math.random() - 0.5) * 0.02,
         imageUri: photoUri,
       });
+
+      console.log('[ReportScreen] Report created with ID:', reportId);
 
       // Mock Municipal Loop — log the "email" to console
       await sendMunicipalEmail({
@@ -69,7 +73,10 @@ const ReportScreen = ({ navigation }) => {
       Alert.alert(
         '✓ Report Submitted',
         'Your report has been saved locally and the Municipal Loop has been notified.\n\nThe community can now upvote this on the Dashboard.',
-        [{ text: 'View on Dashboard', onPress: () => navigation.navigate('Dashboard') }]
+        [{ text: 'View on Dashboard', onPress: () => {
+          console.log('[ReportScreen] Navigating to Dashboard');
+          navigation.navigate('Dashboard');
+        }}]
       );
 
       // Reset form
@@ -79,6 +86,7 @@ const ReportScreen = ({ navigation }) => {
       setSeverity('medium');
       setPhotoUri(null);
     } catch (error) {
+      console.error('[ReportScreen] Submit error:', error);
       Alert.alert('Error', 'Failed to submit report: ' + error.message);
     } finally {
       setSubmitting(false);
@@ -227,9 +235,10 @@ const ReportScreen = ({ navigation }) => {
 
         {/* Submit */}
         <TouchableOpacity
-          style={[styles.submitBtn, submitting && { opacity: 0.5 }]}
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
           onPress={handleSubmit}
           disabled={submitting}
+          activeOpacity={submitting ? 1 : 0.7}
         >
           <Text style={styles.submitText}>
             {submitting ? 'Submitting...' : '📢 Submit Report'}
@@ -279,6 +288,9 @@ const styles = StyleSheet.create({
   submitBtn: {
     backgroundColor: colors.safe, borderRadius: 12,
     padding: 16, alignItems: 'center', marginTop: 20,
+  },
+  submitBtnDisabled: {
+    opacity: 0.6,
   },
   submitText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
   photoContainer: { marginTop: 10 },
