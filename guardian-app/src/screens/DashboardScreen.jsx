@@ -32,8 +32,8 @@ const DashboardScreen = () => {
     try {
       const result = await upvoteReport(id, USER_ID);
 
-      if (result.alreadyVoted) {
-        Alert.alert('Already Voted', 'You have already upvoted this report.');
+      if (result.unvoted) {
+        loadReports();
         return;
       }
 

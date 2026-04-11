@@ -188,32 +188,18 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   button: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#cc0000',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#aa0000',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 34, 34, 0.3)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#ff0000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.4,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-      web: { boxShadow: '0 2px 16px rgba(255,0,0,0.35)' },
-    }),
   },
   buttonPressed: {
     backgroundColor: '#ff0000',
-    borderColor: 'rgba(255, 34, 34, 0.6)',
   },
   buttonActive: {
     backgroundColor: '#ff0000',
-    borderColor: '#ff4444',
   },
   label: {
     color: '#fff',

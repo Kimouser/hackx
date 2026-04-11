@@ -45,7 +45,6 @@ const ThreatCard = ({ report, onUpvote, voted = false }) => {
         <TouchableOpacity
           style={[styles.upvoteBtn, voted && styles.upvoteBtnVoted]}
           onPress={() => onUpvote?.(report.id)}
-          disabled={voted}
         >
           <Text style={[styles.upvoteArrow, voted && styles.votedText]}>
             {voted ? '✓' : '▲'}

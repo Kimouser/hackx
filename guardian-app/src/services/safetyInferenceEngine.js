@@ -77,14 +77,16 @@ const kMeansClusters = (points, k = 3, maxIter = 20) => {
 // Commercial/main road areas have higher light density.
 
 const LIGHT_ZONES = [
-  { lat: 23.0305, lng: 72.5653, radius: 0.008, density: 0.9 },  // Ellisbridge — commercial
-  { lat: 23.0330, lng: 72.5570, radius: 0.006, density: 0.85 },  // CG Road
-  { lat: 23.0242, lng: 72.5720, radius: 0.005, density: 0.8 },   // VS Hospital area
-  { lat: 23.0380, lng: 72.5580, radius: 0.005, density: 0.75 },  // Navrangpura
-  { lat: 23.0225, lng: 72.5714, radius: 0.01, density: 0.7 },    // City center
-  { lat: 23.0488, lng: 72.5946, radius: 0.006, density: 0.8 },   // Civil Hospital
-  { lat: 23.0607, lng: 72.5802, radius: 0.005, density: 0.3 },   // Sabarmati — dim
-  { lat: 23.0069, lng: 72.6005, radius: 0.005, density: 0.2 },   // Kankaria back — dark
+  { lat: 19.0760, lng: 72.8777, radius: 0.01, density: 0.85 },   // City center (CST area)
+  { lat: 19.0553, lng: 72.8340, radius: 0.008, density: 0.9 },   // Bandra Police Station — well lit
+  { lat: 19.0515, lng: 72.8286, radius: 0.006, density: 0.85 },  // Lilavati Hospital area
+  { lat: 19.0660, lng: 72.8640, radius: 0.008, density: 0.8 },   // BKC — commercial
+  { lat: 19.0041, lng: 72.8407, radius: 0.006, density: 0.8 },   // KEM Hospital / Parel
+  { lat: 18.9554, lng: 72.8146, radius: 0.005, density: 0.75 },  // Marine Drive
+  { lat: 19.0069, lng: 72.8159, radius: 0.005, density: 0.4 },   // Worli — moderate
+  { lat: 19.1197, lng: 72.8464, radius: 0.005, density: 0.25 },  // Andheri Station — dim at night
+  { lat: 19.1030, lng: 72.8258, radius: 0.004, density: 0.2 },   // Juhu backside — dark
+  { lat: 19.0195, lng: 72.8425, radius: 0.004, density: 0.15 },  // Dadar alleys — very dark
 ];
 
 const getLightingScore = (lat, lng) => {

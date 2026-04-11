@@ -86,8 +86,8 @@ export const createReport = async ({ title, description, category, severity, lat
 };
 
 /**
- * Upvote a report — strict one-vote-per-user enforcement.
- * Returns { ...report, municipalTriggered, alreadyVoted }
+ * Upvote a report — toggle logic to allow un-voting.
+ * Returns { ...report, municipalTriggered, unvoted }
  */
 export const upvoteReport = async (id, userId = 'anon') => {
   const report = reports.find((r) => r.id === id);
@@ -96,7 +96,10 @@ export const upvoteReport = async (id, userId = 'anon') => {
   // Unique vote check: "reportId:userId"
   const voteKey = `${id}:${userId}`;
   if (upvoteRegistry.has(voteKey)) {
-    return { ...report, municipalTriggered: false, alreadyVoted: true };
+    // Un-vote
+    upvoteRegistry.delete(voteKey);
+    report.upvotes = Math.max(0, report.upvotes - 1);
+    return { ...report, municipalTriggered: false, unvoted: true };
   }
 
   // Register the vote and increment
@@ -109,10 +112,10 @@ export const upvoteReport = async (id, userId = 'anon') => {
     report.municipal_email_date = new Date().toISOString();
     report.status = 'municipal_notified';
     console.log(`[Guardian DB] Municipal Loop triggered for report #${id}`);
-    return { ...report, municipalTriggered: true, alreadyVoted: false };
+    return { ...report, municipalTriggered: true, unvoted: false };
   }
 
-  return { ...report, municipalTriggered: false, alreadyVoted: false };
+  return { ...report, municipalTriggered: false, unvoted: false };
 };
 
 /**

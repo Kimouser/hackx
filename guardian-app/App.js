@@ -26,7 +26,7 @@ export default function App() {
     return (
       <View style={styles.splash}>
         <Text style={styles.splashIcon}>🛡️</Text>
-        <Text style={styles.splashTitle}>Project Guardian</Text>
+        <Text style={styles.splashTitle}>GuardianMap</Text>
         <ActivityIndicator size="large" color={colors.safe} style={{ marginTop: 20 }} />
         <Text style={styles.splashSub}>Initializing safety database...</Text>
         <StatusBar style="light" />

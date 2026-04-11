@@ -1,8 +1,8 @@
 import * as Location from 'expo-location';
 
-export const AHMEDABAD = {
-  latitude: 23.0225,
-  longitude: 72.5714,
+export const MUMBAI = {
+  latitude: 19.0760,
+  longitude: 72.8777,
 };
 
 export const requestLocationPermission = async () => {
@@ -16,7 +16,7 @@ export const requestLocationPermission = async () => {
 
 export const getCurrentLocation = async () => {
   const granted = await requestLocationPermission();
-  if (!granted) return AHMEDABAD;
+  if (!granted) return MUMBAI;
 
   try {
     const loc = await Location.getCurrentPositionAsync({
@@ -27,6 +27,6 @@ export const getCurrentLocation = async () => {
       longitude: loc.coords.longitude,
     };
   } catch {
-    return AHMEDABAD;
+    return MUMBAI;
   }
 };

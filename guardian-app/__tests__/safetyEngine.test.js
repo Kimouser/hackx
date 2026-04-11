@@ -6,26 +6,27 @@
 import { compareRoutes, kMeansClusters, scoreSingleRoute } from '../src/services/safetyInferenceEngine';
 
 const mockThreats = [
-  { latitude: 23.017, longitude: 72.58, upvotes: 5, severity: 'high' },
-  { latitude: 23.018, longitude: 72.581, upvotes: 3, severity: 'medium' },
-  { latitude: 23.016, longitude: 72.579, upvotes: 7, severity: 'critical' },
-  { latitude: 23.060, longitude: 72.590, upvotes: 2, severity: 'low' },
+  { latitude: 19.1197, longitude: 72.8464, upvotes: 28, severity: 'critical' },
+  { latitude: 19.0195, longitude: 72.8425, upvotes: 21, severity: 'critical' },
+  { latitude: 19.1030, longitude: 72.8258, upvotes: 9, severity: 'high' },
+  { latitude: 18.9554, longitude: 72.8146, upvotes: 7, severity: 'medium' },
 ];
 
 const mockSafeZones = [
-  { latitude: 23.0305, longitude: 72.5653, name: 'Police Station', category: 'police_station' },
-  { latitude: 23.0242, longitude: 72.5720, name: 'VS Hospital', category: 'hospital' },
+  { latitude: 19.0515, longitude: 72.8286, name: 'Lilavati Hospital', category: 'hospital' },
+  { latitude: 19.0553, longitude: 72.8340, name: 'Bandra Police Station', category: 'police_station' },
+  { latitude: 19.0041, longitude: 72.8407, name: 'KEM Hospital', category: 'hospital' },
 ];
 
 const fastRoute = [
-  [23.0225, 72.5714], [23.0200, 72.5750], [23.0170, 72.5800],
-  [23.0140, 72.5850], [23.0100, 72.5900], [23.0069, 72.6005],
+  [19.0760, 72.8777], [19.0800, 72.8700], [19.0900, 72.8600],
+  [19.1050, 72.8500], [19.1197, 72.8464],
 ];
 
 const safeRoute = [
-  [23.0225, 72.5714], [23.0242, 72.5720], [23.0220, 72.5750],
-  [23.0195, 72.5680], [23.0140, 72.5680], [23.0120, 72.5750],
-  [23.0100, 72.5850], [23.0069, 72.6005],
+  [19.0760, 72.8777], [19.0750, 72.8750], [19.0700, 72.8680],
+  [19.0660, 72.8640], [19.0700, 72.8500], [19.0900, 72.8400],
+  [19.1170, 72.8400], [19.1197, 72.8464],
 ];
 
 describe('K-Means Clustering', () => {
@@ -50,7 +51,7 @@ describe('K-Means Clustering', () => {
   });
 
   test('handles single point', () => {
-    const clusters = kMeansClusters([[23.0, 72.5]], 1);
+    const clusters = kMeansClusters([[19.0, 72.8]], 1);
     expect(clusters.length).toBe(1);
     expect(clusters[0].density).toBe(1);
   });
