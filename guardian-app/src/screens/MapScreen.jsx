@@ -1,6 +1,6 @@
 /**
  * MapScreen.jsx  –  Project Guardian
- * Features: Autocomplete Search, Dynamic Stats, Tactical Glossary Legend, New Icons
+ * Clean Version: Removed Journey Preview & Fixed Legend Icons
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -11,10 +11,8 @@ import {
 import * as Location from 'expo-location';
 
 import LeafletMap from '../components/LeafletMap';
-import JourneySummaryPopup from '../components/JourneySummaryPopup';
 import { getMapOverlay } from '../db/database';
 import { AHMEDABAD } from '../utils/location';
-import { summarizeJourney } from '../services/journeyAI';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
 import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
@@ -28,24 +26,19 @@ const C = {
 const TILE_URL = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png';
 const TILE_ATTRIBUTION = '&copy; Stadia Maps';
 
-const SAFE_PATHS = [
-  { coords: [ [23.0305, 72.5653], [23.0305, 72.5580], [23.0305, 72.5540], [23.0335, 72.5540], [23.0365, 72.5540], [23.0365, 72.5463] ] }
-];
-
-const INITIAL_JOURNEY = {
-  title: 'Paldi to SG Highway Preview',
-  start: 'Paldi Market', end: 'SG Highway', route: SAFE_PATHS[0].coords,
-  segments: [ { street: 'Ashram Road', locality: 'Paldi', characteristics: 'busy stretch' } ]
-};
-
-// ─── NEW: LEGEND ROW HELPER ───
+// ─── FIXED: LEGEND ROW FOR WEB ───
 const LegendRow = ({ icon, label, sub }) => (
   <View style={styles.legendItem}>
-    <View 
-      style={styles.legendIconContainer} 
-      {...(Platform.OS === 'web' ? { dangerouslySetInnerHTML: { __html: icon } } : {})} 
-    />
-    <View>
+    {Platform.OS === 'web' ? (
+      /* Using a raw div for web to properly inject the SVG icon string */
+      <div 
+        style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+        dangerouslySetInnerHTML={{ __html: icon }} 
+      />
+    ) : (
+      <View style={styles.legendIconPlaceholder} />
+    )}
+    <View style={{ marginLeft: 8 }}>
       <Text style={styles.legendLabel}>{label}</Text>
       {sub && <Text style={styles.legendSubLabel}>{sub}</Text>}
     </View>
@@ -61,10 +54,6 @@ const MapScreen = () => {
   const [safeZones, setSafeZones] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  const [journeyLoading, setJourneyLoading] = useState(false);
-  const [journeySummary, setJourneySummary] = useState(INITIAL_JOURNEY); 
-  const [dynamicPaths, setDynamicPaths] = useState(SAFE_PATHS); 
-
   const [showPaths, setShowPaths] = useState(true);
   const [showThreats, setShowThreats] = useState(true);
   const [showSafeZones, setShowSafeZones] = useState(true);
@@ -101,15 +90,7 @@ const MapScreen = () => {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   }, []);
 
-  const loadJourneySummary = async (journeyObj = INITIAL_JOURNEY) => {
-    setJourneyLoading(true);
-    try {
-      const summary = await summarizeJourney(journeyObj);
-      setJourneySummary(summary);
-    } catch (error) { console.error(error); } finally { setJourneyLoading(false); }
-  };
-
-  useEffect(() => { loadData(); loadJourneySummary(); }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleLocateMe = async () => {
     setIsLocating(true);
@@ -117,17 +98,8 @@ const MapScreen = () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const lat = location.coords.latitude;
-      const lng = location.coords.longitude;
-      setUserLocation({ lat, lng });
-      setMapCenter({ lat, lng });
-      try {
-        const geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-        if (geocode && geocode.length > 0 && (geocode[0].city || geocode[0].region)) {
-          setUserLocName(`${geocode[0].city || geocode[0].subregion || 'Unknown'}, ${geocode[0].region || ''}`);
-          return;
-        }
-      } catch (expoErr) { console.log("Geocoding fallback..."); }
+      setUserLocation({ lat: location.coords.latitude, lng: location.coords.longitude });
+      setMapCenter({ lat: location.coords.latitude, lng: location.coords.longitude });
     } catch (error) { console.error(error); } finally { setIsLocating(false); }
   };
 
@@ -149,15 +121,9 @@ const MapScreen = () => {
   const handleSelectSuggestion = (item) => {
     Keyboard.dismiss();
     setShowSuggestions(false);
-    const destName = item.display_name.split(',')[0]; 
-    setSearchQuery(destName); 
-    const destLat = parseFloat(item.lat);
-    const destLng = parseFloat(item.lon);
-    setMapCenter({ lat: destLat, lng: destLng });
-    setUserLocation({ lat: destLat, lng: destLng });
-    const newPathCoords = [[userLocation.lat, userLocation.lng], [destLat, destLng]];
-    setDynamicPaths([{ coords: newPathCoords }]);
-    loadJourneySummary({ title: `Route to ${destName}`, route: newPathCoords });
+    setSearchQuery(item.display_name.split(',')[0]); 
+    setMapCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lon) });
+    setUserLocation({ lat: parseFloat(item.lat), lng: parseFloat(item.lon) });
   };
 
   if (loading) {
@@ -187,20 +153,13 @@ const MapScreen = () => {
     <View style={styles.root}>
       <LeafletMap
         center={mapCenter}
-        zoom={13}
+        zoom={14}
         threats={mapThreats}
         safeZones={mapSafeZones}
-        safePaths={showPaths ? dynamicPaths : []} 
+        safePaths={showPaths ? [] : []} // Paths removed for clean demo
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
-        pathColor={ICON_COLORS.path}
       />
-
-      {journeySummary && (
-        <View style={styles.previewContainer}>
-          <JourneySummaryPopup summary={journeySummary} loading={journeyLoading} />
-        </View>
-      )}
 
       {!isSOSActive && (
         <View style={styles.legendBar}>
@@ -228,7 +187,6 @@ const MapScreen = () => {
             )}
           </View>
 
-          {/* ── UPDATED: Detailed Legend Dropdown ── */}
           <View style={styles.legendWrapper}>
             <TouchableOpacity style={styles.legendTrigger} onPress={() => setShowLegend(!showLegend)}>
               <Text style={styles.legendTriggerText}>Map Legend {showLegend ? '▲' : '▼'}</Text>
@@ -253,10 +211,6 @@ const MapScreen = () => {
 
                 <View style={styles.legendDivider} />
                 <Text style={styles.legendSectionHead}>NAVIGATION</Text>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendLine, { backgroundColor: C.purple }]} />
-                  <Text style={styles.legendLabel}>AI Safe Path</Text>
-                </View>
                 <View style={styles.legendItem}>
                   <View style={styles.currentLocCircle} />
                   <Text style={styles.legendLabel}>Your Position</Text>
@@ -284,7 +238,6 @@ const MapScreen = () => {
             </View>
             <View style={styles.divider} />
             <Text style={styles.sectionHead}>MAP LAYERS</Text>
-            <LayerToggle label="Safe Paths" icon="🛤️" active={showPaths} onPress={() => setShowPaths(!showPaths)} />
             <LayerToggle label="Threat Zones" icon="🔴" active={showThreats} onPress={() => setShowThreats(!showThreats)} />
             <LayerToggle label="Safe Zones" icon="🟢" active={showSafeZones} onPress={() => setShowSafeZones(!showSafeZones)} />
           </ScrollView>
@@ -310,22 +263,18 @@ const styles = StyleSheet.create({
   suggestionItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: C.border },
   suggestionTitle: { color: C.text, fontSize: 13 },
   
-  // ─── LEGEND STYLES ───
   legendWrapper: { position: 'relative', zIndex: 999 },
   legendTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: C.border },
   legendTriggerText: { color: C.text, fontSize: 13, fontWeight: '600' },
   legendDropdown: { position: 'absolute', top: 42, right: 0, backgroundColor: C.surface, padding: 16, borderRadius: 8, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 15, elevation: 10, width: 240, gap: 12 },
   legendSectionHead: { color: C.purpleBright, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4 },
   legendGrid: { gap: 8 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  legendIconContainer: { width: 20, height: 20, transform: [{ scale: 0.7 }] }, 
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendLabel: { color: C.text, fontSize: 12, fontWeight: '600' },
   legendSubLabel: { color: C.textMuted, fontSize: 10 },
   legendDivider: { height: 1, backgroundColor: C.border, marginVertical: 4 },
-  legendLine: { width: 20, height: 3, borderRadius: 2 },
   currentLocCircle: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#4285F4', borderWidth: 2, borderColor: '#fff' },
 
-  previewContainer: { position: 'absolute', top: 70, right: 20, zIndex: 100 },
   sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100 },
   sidebarContent: { paddingTop: 48, paddingHorizontal: 14, gap: 14 },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -351,8 +300,6 @@ const styles = StyleSheet.create({
   pill: { width: 30, height: 17, borderRadius: 9, backgroundColor: C.panelBorder, padding: 2 },
   pillKnob: { width: 13, height: 13, borderRadius: 7, backgroundColor: C.textMuted },
   pillKnobOn: { backgroundColor: '#fff', marginLeft: 'auto' },
-  chevronWrap: { position: 'absolute', top: '50%', left: SIDEBAR_W, width: 22, height: 48, backgroundColor: C.panel, justifyContent: 'center', alignItems: 'center' },
-  chevron: { color: C.purpleBright, fontSize: 16 },
   sosFloat: { position: 'absolute', bottom: 0, right: 0, transform: [{ scale: 0.75 }] },
   sosOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,8,16,0.97)', justifyContent: 'center', alignItems: 'center' },
 });
