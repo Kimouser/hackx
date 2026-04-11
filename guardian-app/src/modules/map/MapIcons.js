@@ -6,8 +6,8 @@
  * Each export is a function that returns an `L.divIcon`-compatible config.
  *
  * Usage in LeafletMap (inside the WebView HTML):
- *   const icon = L.divIcon({ html: ICONS.home, className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
- *   L.marker([lat, lng], { icon }).addTo(map);
+ * const icon = L.divIcon({ html: ICONS.home, className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
+ * L.marker([lat, lng], { icon }).addTo(map);
  *
  * Drop into: src/modules/map/MapIcons.js
  */
@@ -80,6 +80,17 @@ export const CCTV_ICON = (color = ICON_COLORS.threat) => icon(
    <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>`,
   color
 );
+
+/** Pulsing Current Location Pin */
+export const CURRENT_LOCATION_ICON = () => `
+  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="12" fill="rgba(66, 133, 244, 0.3)">
+      <animate attributeName="r" values="8;16;8" dur="2s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.8;0;0.8" dur="2s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="16" cy="16" r="6" fill="#4285F4" stroke="#ffffff" stroke-width="2" />
+  </svg>
+`;
 
 // ─── Leaflet DivIcon config factory ──────────────────────────────────────────
 
