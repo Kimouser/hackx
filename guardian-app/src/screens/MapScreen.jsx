@@ -1,5 +1,6 @@
 /**
- * MapScreen.jsx  –  Project Guardian (Interactive Demo Edition)
+ * MapScreen.jsx  –  Project Guardian
+ * Search Bar integrated directly into the Top Legend Bar
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -40,8 +41,8 @@ const INITIAL_JOURNEY = {
 
 const MOCK_STATS = { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 };
 
-function ScoreRing({ score }) { /* ... */ return (<View style={styles.ringOuter}><View style={styles.ringInner}><Text style={styles.scoreNum}>{score}</Text><Text style={styles.scoreLabel}>SAFE</Text></View></View>); }
-function StatTile({ icon, value, label, accent }) { /* ... */ return (<View style={[styles.statTile, accent && styles.statTileAccent]}><Text style={styles.statIcon}>{icon}</Text><Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>); }
+function ScoreRing({ score }) { return (<View style={styles.ringOuter}><View style={styles.ringInner}><Text style={styles.scoreNum}>{score}</Text><Text style={styles.scoreLabel}>SAFE</Text></View></View>); }
+function StatTile({ icon, value, label, accent }) { return (<View style={[styles.statTile, accent && styles.statTileAccent]}><Text style={styles.statIcon}>{icon}</Text><Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>); }
 function LayerToggle({ label, icon, active, color, onPress }) { const dotColor = color ?? C.purple; return (<TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}><Text style={styles.layerIcon}>{icon}</Text><Text style={[styles.layerLabel, active && { color: dotColor }]}>{label}</Text><View style={[styles.pill, active && { backgroundColor: dotColor }]}><View style={[styles.pillKnob, active && styles.pillKnobOn]} /></View></TouchableOpacity>); }
 
 const MapScreen = () => {
@@ -52,7 +53,7 @@ const MapScreen = () => {
   // Journey & Paths State
   const [journeyLoading, setJourneyLoading] = useState(false);
   const [journeySummary, setJourneySummary] = useState(INITIAL_JOURNEY); 
-  const [dynamicPaths, setDynamicPaths] = useState(SAFE_PATHS); // Allows us to update the map line
+  const [dynamicPaths, setDynamicPaths] = useState(SAFE_PATHS); 
 
   const [showPaths, setShowPaths] = useState(true);
   const [showThreats, setShowThreats] = useState(true);
@@ -128,21 +129,18 @@ const MapScreen = () => {
       if (data && data.length > 0) {
         const destLat = parseFloat(data[0].lat);
         const destLng = parseFloat(data[0].lon);
-        const destName = data[0].display_name.split(',')[0]; // Grabs just the city/area name
+        const destName = data[0].display_name.split(',')[0]; 
 
         const startLat = userLocation ? userLocation.lat : AHMEDABAD.latitude;
         const startLng = userLocation ? userLocation.lng : AHMEDABAD.longitude;
 
-        // 1. Move Map & Blue Dot
         setMapCenter({ lat: destLat, lng: destLng });
         setUserLocation({ lat: destLat, lng: destLng });
         setUserLocName(destName);
 
-        // 2. Draw a new path on the map
         const newPathCoords = [[startLat, startLng], [destLat, destLng]];
         setDynamicPaths([{ coords: newPathCoords }]);
 
-        // 3. Trigger AI Route Preview
         const newJourneyMock = {
           title: `Route to ${destName}`,
           start: 'Previous Location',
@@ -174,7 +172,6 @@ const MapScreen = () => {
   const mapSafeZones = showSafeZones ? safeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
   let mapThreats = showThreats ? threats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
   
-  // Inject the Blue Dot
   if (userLocation) {
     mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
   }
@@ -187,30 +184,13 @@ const MapScreen = () => {
         zoom={13}
         threats={mapThreats}
         safeZones={mapSafeZones}
-        safePaths={showPaths ? dynamicPaths : []} // Now uses dynamic routes!
+        safePaths={showPaths ? dynamicPaths : []} 
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
         pathColor={ICON_COLORS.path}
       />
 
-      {/* ── MOVED UP: Search Bar ── */}
-      {!isSOSActive && (
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search destination..."
-            placeholderTextColor={C.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
-          />
-          <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
-            {isSearching ? <ActivityIndicator size="small" color="#fff" /> : <Text>🔍</Text>}
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── MOVED UP: Journey Preview Box (Clears SOS Button) ── */}
+      {/* ── RESTORED: Journey Preview ── */}
       {journeySummary && (
         <View style={styles.previewContainer}>
           <JourneySummaryPopup
@@ -221,11 +201,32 @@ const MapScreen = () => {
         </View>
       )}
 
+      {/* ── UPDATED: Integrated Legend & Search Bar ── */}
       {!isSOSActive && (
-        <View style={styles.legend}>
-          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones</Text></View>
-          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats</Text></View>
-          <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.purple }]} /><Text style={styles.legendLabel}>Safe Paths</Text></View>
+        <View style={styles.legendBar}>
+          
+          {/* Search Input on the Left */}
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search destination..."
+              placeholderTextColor={C.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+            />
+            <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+              {isSearching ? <ActivityIndicator size="small" color="#fff" /> : <Text>🔍</Text>}
+            </TouchableOpacity>
+          </View>
+
+          {/* Legend Items on the Right */}
+          <View style={styles.legendItemGroup}>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.purple }]} /><Text style={styles.legendLabel}>Safe Paths</Text></View>
+          </View>
+
         </View>
       )}
 
@@ -282,38 +283,49 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', gap: 14 },
   loadingText: { color: C.textSub, fontSize: 13, letterSpacing: 1 },
   
-  // ─── Negative Top Margin to push into Navigation Header space ───
-  searchContainer: {
+  // ─── INTEGRATED TOP BAR STYLES ───
+  legendBar: {
     position: 'absolute', 
-    top: Platform.OS === 'web' ? -48 : 10,  // Adjusts based on web vs mobile
-    left: SIDEBAR_W + 20,
-    width: '100%',
-    maxWidth: 350,
-    height: 38,
+    top: 0, 
+    left: SIDEBAR_W, // Starts perfectly after the sidebar
+    right: 0, 
     flexDirection: 'row', 
-    backgroundColor: C.panel,
-    borderRadius: 8, 
+    alignItems: 'center', 
+    justifyContent: 'space-between', // Search on left, Legend on right
+    paddingVertical: 10, 
+    paddingHorizontal: 20, 
+    backgroundColor: 'rgba(14,14,26,0.95)', // Slightly more opaque
+    zIndex: 50, 
+    borderBottomWidth: 1, 
+    borderBottomColor: C.panelBorder 
+  },
+  
+  searchContainer: {
+    width: 300,
+    height: 36,
+    flexDirection: 'row', 
+    backgroundColor: C.surface, // Blends beautifully with the dark bar
+    borderRadius: 6, 
     borderWidth: 1, 
-    borderColor: C.panelBorder,
-    zIndex: 1000, // Forces it over everything
-    elevation: 10,
+    borderColor: C.border,
   },
-  searchInput: { flex: 1, color: C.text, paddingHorizontal: 15, fontSize: 14, outlineStyle: 'none' },
-  searchButton: { paddingHorizontal: 15, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderColor: C.panelBorder },
+  searchInput: { flex: 1, color: C.text, paddingHorizontal: 12, fontSize: 13, outlineStyle: 'none' },
+  searchButton: { paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderColor: C.border },
 
-  // ─── Moved Up to avoid SOS Button ───
-  previewContainer: {
-    position: 'absolute', 
-    top: 15, 
-    right: 20, 
-    zIndex: 100,
-    maxHeight: '75%', // Ensures it scrolls instead of hitting the SOS button
-  },
-
-  legend: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(14,14,26,0.90)', gap: 16, zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendItemGroup: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: { color: C.textSub, fontSize: 11 },
+
+  // ─── Pushed Journey Preview down slightly to clear the thicker top bar ───
+  previewContainer: {
+    position: 'absolute', 
+    top: 70, 
+    right: 20, 
+    zIndex: 100,
+    maxHeight: '75%', 
+  },
+
   sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100, ...Platform.select({ ios: {}, android: { elevation: 12 } }) },
   sidebarContent: { paddingTop: 48, paddingHorizontal: 14, paddingBottom: 8, gap: 14 },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
