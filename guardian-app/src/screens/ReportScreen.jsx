@@ -51,6 +51,7 @@ const ReportScreen = ({ navigation }) => {
         severity,
         latitude: AHMEDABAD.latitude + (Math.random() - 0.5) * 0.02,
         longitude: AHMEDABAD.longitude + (Math.random() - 0.5) * 0.02,
+        imageUri: photoUri,
       });
 
       // Mock Municipal Loop — log the "email" to console
