@@ -1,231 +1,74 @@
 /**
- * seed.js - Mock safety data for Ahmedabad
- * Center: Ahmedabad (23.0225, 72.5714)
- * All coordinates are real Ahmedabad landmarks.
+ * seed.js - Project Guardian
+ * Mumbai (Vidyavihar/Ghatkopar) dataset for the KJSCE Hackathon.
  */
 
-export const SEED_REPORTS = [
-  {
-    title: 'Broken streetlights near Sabarmati Ashram',
-    description: 'Three consecutive streetlights non-functional for 2+ weeks. Extremely dark after 8 PM.',
-    category: 'broken_light',
-    severity: 'high',
-    latitude: 23.0607,
-    longitude: 72.5802,
-    upvotes: 14,
-    status: 'municipal_notified',
-    municipal_email_sent: 1,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Harassment zone near Manek Chowk',
-    description: 'Multiple women reported eve-teasing incidents between 9 PM - 12 AM. Poorly lit side alleys.',
-    category: 'harassment',
-    severity: 'critical',
-    latitude: 23.0258,
-    longitude: 72.5873,
-    upvotes: 28,
-    status: 'escalated',
-    municipal_email_sent: 1,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Dimly lit underpass at Gujarat University',
-    description: 'Underpass near university main gate has zero visibility at night. Students feel unsafe.',
-    category: 'unsafe_area',
-    severity: 'high',
-    latitude: 23.0365,
-    longitude: 72.5463,
-    upvotes: 9,
-    status: 'active',
-    municipal_email_sent: 0,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Non-functional lights on CG Road',
-    description: 'Stretch near Parimal Garden has 4 dead lights. Dark despite being a commercial zone.',
-    category: 'broken_light',
-    severity: 'medium',
-    latitude: 23.0325,
-    longitude: 72.5560,
-    upvotes: 7,
-    status: 'active',
-    municipal_email_sent: 0,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Unsafe alley behind Kankaria Lake',
-    description: 'Narrow passage with no lighting or CCTV. Chain-snatching reported twice this month.',
-    category: 'unsafe_area',
-    severity: 'critical',
-    latitude: 23.0069,
-    longitude: 72.6005,
-    upvotes: 21,
-    status: 'municipal_notified',
-    municipal_email_sent: 1,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Unmanned police booth at Paldi Circle',
-    description: 'Police booth listed as 24/7 but consistently empty after 10 PM.',
-    category: 'unresponsive_police',
-    severity: 'high',
-    latitude: 23.0150,
-    longitude: 72.5600,
-    upvotes: 16,
-    status: 'municipal_notified',
-    municipal_email_sent: 1,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Dark stretch on SG Highway',
-    description: '300m stretch near Iscon Mega Mall with no working streetlights.',
-    category: 'broken_light',
-    severity: 'medium',
-    latitude: 23.0310,
-    longitude: 72.5100,
-    upvotes: 5,
-    status: 'active',
-    municipal_email_sent: 0,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Late-night harassment at Railway Station',
-    description: 'Women commuters report feeling unsafe during late arrivals. Poor lighting at platforms 7-9.',
-    category: 'harassment',
-    severity: 'high',
-    latitude: 23.0268,
-    longitude: 72.6006,
-    upvotes: 12,
-    status: 'municipal_notified',
-    municipal_email_sent: 1,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Abandoned construction site near IIM',
-    description: 'Open construction site used as hideout. No fencing, lighting, or security after dark.',
-    category: 'unsafe_area',
-    severity: 'high',
-    latitude: 23.0327,
-    longitude: 72.5279,
-    upvotes: 8,
-    status: 'active',
-    municipal_email_sent: 0,
-    municipal_email_date: null,
-    image_uri: '',
-  },
-  {
-    title: 'Broken CCTV cameras at Law Garden',
-    description: 'All three CCTV cameras at Law Garden night market have been non-functional for a month.',
-    category: 'broken_light',
-    severity: 'medium',
-    latitude: 23.0290,
-    longitude: 72.5610,
-    upvotes: 11,
-    status: 'municipal_notified',
-    municipal_email_sent: 1,
-    municipal_email_date: null,
-    image_uri: '',
-  },
+import { resetDatabase, getDB } from './database';
+
+const MUMBAI_SAFE_ZONES = [
+  { name: 'Rajawadi Hospital', type: 'hospital', lat: 19.0780, lng: 72.8970, addr: 'Ghatkopar East', phone: '022-21021234' },
+  { name: 'Vidyavihar Police Station', type: 'police', lat: 19.0805, lng: 72.8965, addr: 'Near Station', phone: '022-25121000' },
+  { name: 'Apollo Pharmacy Vidyavihar', type: 'pharmacy', lat: 19.0765, lng: 72.9000, addr: 'Vidyavihar West', phone: '022-25101111' },
+  { name: 'Ghatkopar Fire Brigade', type: 'fire', lat: 19.0850, lng: 72.9080, addr: 'LBS Marg', phone: '101' },
+  { name: 'Vidyavihar Railway Station', type: 'railway', lat: 19.0798, lng: 72.8988, addr: 'Vidyavihar West', phone: '' },
+  { name: 'Ghatkopar West Market', type: 'market', lat: 19.0860, lng: 72.9005, addr: 'Station Road', phone: '' },
+  { name: 'KJSCE Safe Haven (K-Block)', type: 'home', lat: 19.0730, lng: 72.8995, addr: 'Somaiya Campus', phone: '' },
 ];
 
-export const SEED_SAFE_ZONES = [
-  {
-    name: 'Civil Hospital Ahmedabad',
-    category: 'hospital',
-    description: 'Major government hospital with 24/7 emergency ward, trauma center.',
-    latitude: 23.0488,
-    longitude: 72.5946,
-    address: 'Asarwa, Ahmedabad 380016',
-    phone: '079-22683721',
-  },
-  {
-    name: 'Ellisbridge Police Station',
-    category: 'police_station',
-    description: 'Active police station with dedicated women helpdesk and night patrol.',
-    latitude: 23.0305,
-    longitude: 72.5653,
-    address: 'Ellisbridge, Ahmedabad 380006',
-    phone: '079-26577100',
-  },
-  {
-    name: 'VS Hospital Emergency',
-    category: 'hospital',
-    description: 'Government hospital with 24/7 emergency services.',
-    latitude: 23.0242,
-    longitude: 72.5720,
-    address: 'Ellisbridge, Ahmedabad 380006',
-    phone: '079-26577621',
-  },
-  {
-    name: 'Navrangpura Fire Station',
-    category: 'fire_station',
-    description: 'Fire station with 24/7 emergency response team.',
-    latitude: 23.0380,
-    longitude: 72.5580,
-    address: 'Navrangpura, Ahmedabad 380009',
-    phone: '101',
-  },
-  {
-    name: 'Starbucks CG Road (24/7)',
-    category: '24x7_hotspot',
-    description: 'Well-lit 24-hour cafe with high footfall and security guard.',
-    latitude: 23.0330,
-    longitude: 72.5570,
-    address: 'CG Road, Navrangpura',
-    phone: '',
-  },
-  {
-    name: 'Apollo Pharmacy - Paldi',
-    category: 'pharmacy',
-    description: '24-hour pharmacy, always staffed with CCTV.',
-    latitude: 23.0140,
-    longitude: 72.5680,
-    address: 'Paldi, Ahmedabad 380007',
-    phone: '079-26578900',
-  },
-  {
-    name: 'Satellite Police Chowky',
-    category: 'police_station',
-    description: 'Community police outpost with active night presence.',
-    latitude: 23.0195,
-    longitude: 72.5250,
-    address: 'Satellite, Ahmedabad 380015',
-    phone: '079-26922100',
-  },
-  {
-    name: 'Indian Oil Pump - SG Highway',
-    category: '24x7_hotspot',
-    description: '24-hour petrol pump with CCTV, staff, and well-lit area.',
-    latitude: 23.0280,
-    longitude: 72.5070,
-    address: 'SG Highway, Ahmedabad',
-    phone: '',
-  },
-  {
-    name: 'Nari Suraksha Kendra',
-    category: 'shelter',
-    description: 'Government-run women safety shelter with 24/7 helpline (1091).',
-    latitude: 23.0100,
-    longitude: 72.5850,
-    address: 'Maninagar, Ahmedabad',
-    phone: '1091',
-  },
-  {
-    name: 'Sola Police Station',
-    category: 'police_station',
-    description: 'Police station with women cell, near SG Highway.',
-    latitude: 23.0500,
-    longitude: 72.5300,
-    address: 'Sola, Ahmedabad 380060',
-    phone: '079-27913100',
-  },
+const MUMBAI_THREATS = [
+  { title: 'Dimly lit pathway near Campus', cat: 'broken_light', lat: 19.0745, lng: 72.8990, up: 12 },
+  { title: 'Harassment hotspot - Station Alley', cat: 'harassment', lat: 19.0810, lng: 72.8950, up: 24 },
+  { title: 'Unsafe Passage - Vikhroli Side', cat: 'unsafe_area', lat: 19.0710, lng: 72.9020, up: 8 }
 ];
+
+/**
+ * Main Seeding Function
+ * Wipes the browser storage and populates it with fresh Mumbai landmarks.
+ */
+export const initMockData = async () => {
+  try {
+    console.log('[Seed] Re-initializing Mumbai safety grid...');
+    
+    // 1. Wipe current storage
+    await resetDatabase(); 
+
+    // 2. Get the mock DB interface
+    const db = await getDB();
+
+    // 3. Insert Safe Zones (Triggers custom icons on the map)
+    for (const zone of MUMBAI_SAFE_ZONES) {
+      await db.runAsync(
+        `INSERT INTO safe_zones`, // The mock runAsync identifies the table from the string
+        [
+          zone.name, 
+          zone.type, 
+          zone.lat, 
+          zone.lng, 
+          zone.addr, 
+          zone.phone
+        ]
+      );
+    }
+
+    // 4. Insert Threats (Triggers red markers)
+    for (const threat of MUMBAI_THREATS) {
+      await db.runAsync(
+        `INSERT INTO reports`, 
+        [
+          threat.title, 
+          threat.cat, 
+          threat.lat, 
+          threat.lng, 
+          threat.up, 
+          threat.up >= 10 ? 'municipal_notified' : 'active'
+        ]
+      );
+    }
+
+    console.log(`[Seed] Successfully deployed ${MUMBAI_SAFE_ZONES.length} Mumbai landmarks.`);
+    return true;
+  } catch (error) {
+    console.error('[Seed] Seeding failed:', error);
+    return false;
+  }
+};

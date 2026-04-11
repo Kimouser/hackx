@@ -43,10 +43,24 @@ export const HOSPITAL_ICON = (color = ICON_COLORS.safe) => icon(
   color
 );
 
+/** Pharmacy / Medical Store (Pill icon) */
+export const PHARMACY_ICON = (color = ICON_COLORS.safe) => icon(
+  `<rect x="7" y="3" width="10" height="18" rx="5"/>
+   <line x1="7" y1="12" x2="17" y2="12"/>`,
+  color
+);
+
 /** Police station / law enforcement */
 export const POLICE_ICON = (color = ICON_COLORS.safe) => icon(
   `<path d="M12 2l7 4v5c0 5-3.5 8.5-7 10C8.5 19.5 5 16 5 11V6l7-4z"/>
    <path d="M9 12l2 2 4-4"/>`,
+  color
+);
+
+/** Fire Brigade / Station (Flame icon) */
+export const FIRE_ICON = (color = ICON_COLORS.safe) => icon(
+  `<path d="M12 2c0 0-4.5 4.5-4.5 9a4.5 4.5 0 0 0 9 0C16.5 6.5 12 2 12 2z"/>
+   <path d="M12 14a2 2 0 0 1-2-2c0-1.5 2-3 2-3s2 1.5 2 3a2 2 0 0 1-2 2z"/>`,
   color
 );
 
@@ -56,6 +70,12 @@ export const METRO_ICON = (color = ICON_COLORS.safe) => icon(
    <path d="M8 18l-2 4M16 18l2 4M8 10h8M8 6h8"/>
    <circle cx="9" cy="14" r="1" fill="${color}" stroke="none"/>
    <circle cx="15" cy="14" r="1" fill="${color}" stroke="none"/>`,
+  color
+);
+
+/** Railway Station (Train tracks icon) */
+export const RAILWAY_ICON = (color = ICON_COLORS.safe) => icon(
+  `<path d="M9 3L7 21M15 3l2 18M5 7h14M4 12h16M3 17h18"/>`,
   color
 );
 
@@ -114,19 +134,17 @@ export function divIconConfig(svgString, size = 32) {
 
 /**
  * Pick the right icon for a safe-zone marker based on its `type` property.
- * Matches what getMapOverlay() puts in overlay.safeZones[n].type
- *
- * @param {'home'|'hospital'|'police'|'metro'|'market'} type
- * @param {string} [color]
- * @returns {string}  SVG string
  */
 export function safeZoneIcon(type, color = ICON_COLORS.safe) {
   switch (type) {
-    case 'hospital': return HOSPITAL_ICON(color);
-    case 'police':   return POLICE_ICON(color);
-    case 'metro':    return METRO_ICON(color);
-    case 'market':   return MARKET_ICON(color);
+    case 'hospital': return HOSPITAL_ICON(color); 
+    case 'pharmacy': return PHARMACY_ICON(color); // New: Med stores
+    case 'police':   return POLICE_ICON(color);   
+    case 'fire':     return FIRE_ICON(color);     // New: Fire brigade
+    case 'metro':    return METRO_ICON(color);    
+    case 'railway':  return RAILWAY_ICON(color);  // New: Railway
+    case 'market':   return MARKET_ICON(color);   
     case 'home':
-    default:         return HOME_ICON(color);
+    default:         return HOME_ICON(color);     
   }
 }
