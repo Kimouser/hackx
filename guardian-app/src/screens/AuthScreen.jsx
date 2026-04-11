@@ -1,19 +1,31 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView,
+  KeyboardAvoidingView, Platform, ScrollView, Alert,
 } from 'react-native';
 import colors from '../theme/colors';
+import { createUser, loginUser } from '../db/database';
 
 const AuthScreen = ({ navigation }) => {
   const [isLogin, setIsLogin] = useState(true);
+  const [role, setRole] = useState('user'); // 'user' or 'volunteer'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [aadhar, setAadhar] = useState('');
+  const [area, setArea] = useState('');
 
-  const handleSubmit = () => {
-    // For hackathon demo — skip real auth, go straight to app
-    navigation.replace('Main');
+  const handleSubmit = async () => {
+    try {
+      if (isLogin) {
+        await loginUser({ name, email, password, role });
+      } else {
+        await createUser({ name, email, password, role, aadhar, area });
+      }
+      navigation.replace('Main');
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
   };
 
   return (
@@ -31,15 +43,39 @@ const AuthScreen = ({ navigation }) => {
           <Text style={styles.subtitle}>Navigate Safe. Stay Protected.</Text>
         </View>
 
+        {/* Role Selection */}
+        <View style={styles.roleContainer}>
+          <TouchableOpacity
+            style={[styles.roleBtn, role === 'user' && styles.selectedRole]}
+            onPress={() => setRole('user')}
+          >
+            <Text style={[styles.roleText, role === 'user' && styles.selectedRoleText]}>Login as User</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.roleBtn, role === 'volunteer' && styles.selectedRole]}
+            onPress={() => setRole('volunteer')}
+          >
+            <Text style={[styles.roleText, role === 'volunteer' && styles.selectedRoleText]}>Login as Volunteer Bodyguard</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Form */}
         <View style={styles.form}>
-          {!isLogin && (
+          <TextInput
+            style={styles.input}
+            placeholder="Full Name"
+            placeholderTextColor={colors.textMuted}
+            value={name}
+            onChangeText={setName}
+          />
+          {!isLogin && role === 'volunteer' && (
             <TextInput
               style={styles.input}
-              placeholder="Full Name"
+              placeholder="Aadhar Card Number"
               placeholderTextColor={colors.textMuted}
-              value={name}
-              onChangeText={setName}
+              value={aadhar}
+              onChangeText={setAadhar}
+              keyboardType="numeric"
             />
           )}
           <TextInput
@@ -51,6 +87,15 @@ const AuthScreen = ({ navigation }) => {
             keyboardType="email-address"
             autoCapitalize="none"
           />
+          {!isLogin && role === 'volunteer' && (
+            <TextInput
+              style={styles.input}
+              placeholder="Area of Residence"
+              placeholderTextColor={colors.textMuted}
+              value={area}
+              onChangeText={setArea}
+            />
+          )}
           <TextInput
             style={styles.input}
             placeholder="Password"
@@ -61,16 +106,16 @@ const AuthScreen = ({ navigation }) => {
           />
 
           <TouchableOpacity style={styles.btn} onPress={handleSubmit}>
-            <Text style={styles.btnText}>{isLogin ? 'Login' : 'Register'}</Text>
+            <Text style={styles.btnText}>{isLogin ? 'Login' : 'Sign Up'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
             <Text style={styles.toggle}>
-              {isLogin ? "Don't have an account? Register" : 'Already have an account? Login'}
+              {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.skipBtn} onPress={handleSubmit}>
+          <TouchableOpacity style={styles.skipBtn} onPress={() => navigation.replace('Main')}>
             <Text style={styles.skipText}>Skip for Demo →</Text>
           </TouchableOpacity>
         </View>
@@ -111,6 +156,14 @@ const styles = StyleSheet.create({
     marginVertical: 12, borderRadius: 1, opacity: 0.5,
   },
   subtitle: { fontSize: 13, color: colors.textMuted, fontStyle: 'italic' },
+  roleContainer: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  roleBtn: {
+    flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', backgroundColor: colors.surface,
+  },
+  selectedRole: { borderColor: colors.safe, backgroundColor: colors.accentDim },
+  roleText: { color: colors.textSecondary, fontSize: 14 },
+  selectedRoleText: { color: colors.safe, fontWeight: '600' },
   form: { gap: 14 },
   input: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
