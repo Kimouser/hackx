@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   activeSOSContainer: {
     ...StyleSheet.absoluteFillObject, // Covers the whole map
-    backgroundColor: 'rgba(13, 13, 13, 0.95)', // 95% opacity black overlay
+    backgroundColor: 'rgba(36, 3, 28, 0.95)', // 95% opacity black overlay
     zIndex: 9999, // Stays above everything, including the legend
     justifyContent: 'center',
   }
