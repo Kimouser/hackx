@@ -1,3 +1,8 @@
+/**
+ * App.js - Project Guardian
+ * Entry point: Handles SQLite initialization, Demo Seeding, and SOS Provider.
+ */
+
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -7,7 +12,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import colors from './src/theme/colors';
 
-// Database & Seeding
+// Database & Seeding Logic
 import { setupDatabase } from './src/db/database';
 import { initMockData } from './src/db/seed';
 
@@ -15,10 +20,11 @@ import { initMockData } from './src/db/seed';
 import { SOSProvider } from './src/modules/emergency';
 
 // ─── DEMO CONFIGURATION ──────────────────────────────────────────────────
+// Tailored for Falgun's Project Guardian Demo
 const CURRENT_USER = { name: 'Falgun' }; 
 const EMERGENCY_CONTACTS = [
   { name: 'Mom', phone: '+91XXXXXXXXXX' },
-  { name: 'Rahul', phone: '+91XXXXXXXXXX' },
+  { name: 'Emergency Services', phone: '1091' },
 ];
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -28,21 +34,22 @@ export default function App() {
   useEffect(() => {
     const prepareApp = async () => {
       try {
-        console.log('[Guardian] Initializing safety grid...');
+        console.log('[Guardian] Booting safety systems...');
         
-        // 1. Setup SQLite tables
+        // 1. Initialize SQLite Tables
         await setupDatabase();
         
-        // 2. Run the Seed (Wipes old data and inserts fresh Mumbai landmarks)
-        // We run this every boot during the hackathon to ensure the map is populated
+        // 2. Wipe & Seed Mock Data (Mumbai Grid)
+        // Note: We run this every boot during the hackathon to ensure 
+        // the map icons (Hospitals, Fire, etc.) are always visible.
         await initMockData();
         
-        console.log('[Guardian] Database initialized & Seeded with Mumbai Data');
+        console.log('[Guardian] Safety grid initialized & Seeded with Mumbai landmarks');
       } catch (error) {
-        console.error('[Guardian] Initialization error:', error);
+        console.error('[Guardian] Fatal initialization error:', error);
       } finally {
-        // Short delay to ensure the splash screen is visible for the demo vibe
-        setTimeout(() => setDbReady(true), 1000);
+        // Keeps splash visible for 1.5s for a professional feel
+        setTimeout(() => setDbReady(true), 1500);
       }
     };
 
@@ -53,10 +60,12 @@ export default function App() {
   if (!dbReady) {
     return (
       <View style={styles.splash}>
-        <Text style={styles.splashIcon}>🛡️</Text>
-        <Text style={styles.splashTitle}>Project Guardian</Text>
-        <ActivityIndicator size="large" color={colors.safe} style={{ marginTop: 20 }} />
-        <Text style={styles.splashSub}>Initializing safety database...</Text>
+        <View style={styles.splashContent}>
+          <Text style={styles.splashIcon}>🛡️</Text>
+          <Text style={styles.splashTitle}>Project Guardian</Text>
+          <ActivityIndicator size="large" color={colors.safe || '#06d6a0'} style={{ marginTop: 20 }} />
+          <Text style={styles.splashSub}>Initializing safety database...</Text>
+        </View>
         <StatusBar style="light" />
       </View>
     );
@@ -80,16 +89,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center' 
   },
-  splashIcon: { fontSize: 80, marginBottom: 12 },
+  splashContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashIcon: { 
+    fontSize: 80, 
+    marginBottom: 16,
+    // Add shadow/glow for demo pop
+    textShadowColor: 'rgba(6, 214, 160, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 20,
+  },
   splashTitle: { 
-    fontSize: 28, 
-    fontWeight: '800', 
+    fontSize: 32, 
+    fontWeight: '900', 
     color: colors.safe || '#06d6a0', 
-    letterSpacing: 0.5 
+    letterSpacing: 1.5,
+    textTransform: 'uppercase'
   },
   splashSub: { 
     color: colors.textMuted || '#504d6a', 
-    fontSize: 13, 
-    marginTop: 12 
+    fontSize: 14, 
+    marginTop: 15,
+    letterSpacing: 1,
+    fontStyle: 'italic'
   },
 });
