@@ -4,8 +4,10 @@ import {
 } from 'react-native';
 import colors from '../theme/colors';
 import ThreatCard from '../components/ThreatCard';
-import { getAllReports, upvoteReport } from '../db/database';
+import { getAllReports, upvoteReport, hasUserVoted } from '../db/database';
 import { sendMunicipalEmail } from '../services/municipalService';
+
+const USER_ID = 'demo_user';
 
 const DashboardScreen = () => {
   const [reports, setReports] = useState([]);
@@ -28,14 +30,18 @@ const DashboardScreen = () => {
 
   const handleUpvote = async (id) => {
     try {
-      const result = await upvoteReport(id);
+      const result = await upvoteReport(id, USER_ID);
+
+      if (result.alreadyVoted) {
+        Alert.alert('Already Voted', 'You have already upvoted this report.');
+        return;
+      }
 
       if (result.municipalTriggered) {
-        // Municipal Loop activated!
         await sendMunicipalEmail(result);
         Alert.alert(
-          '📧 Municipal Loop Activated!',
-          `This report has reached 10+ upvotes.\n\nAn automated email has been sent to the Ahmedabad Municipal Corporation.\n\nCheck the console for the email content.`,
+          'Municipal Loop Activated!',
+          'This report reached 10+ upvotes.\n\nAn automated email has been sent to the Ahmedabad Municipal Corporation.',
           [{ text: 'Great!' }]
         );
       }
@@ -80,7 +86,11 @@ const DashboardScreen = () => {
         data={reports}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => (
-          <ThreatCard report={item} onUpvote={handleUpvote} />
+          <ThreatCard
+            report={item}
+            onUpvote={handleUpvote}
+            voted={hasUserVoted(item.id, USER_ID)}
+          />
         )}
         contentContainerStyle={styles.list}
         refreshControl={

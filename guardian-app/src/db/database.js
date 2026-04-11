@@ -1,10 +1,8 @@
 /**
  * Guardian Database — In-Memory Store
  *
- * Uses a pure JS in-memory data store that works on Web + iOS + Android
- * with zero native dependencies. Data is pre-seeded from seed.js on init.
- *
- * For production: swap this with expo-sqlite (native) or an API backend.
+ * Pure JS in-memory data store — works on Web + iOS + Android.
+ * Data is pre-seeded from seed.js on init.
  */
 
 import { SEED_REPORTS, SEED_SAFE_ZONES } from './seed';
@@ -17,12 +15,14 @@ let nextReportId = 1;
 let nextLogId = 1;
 let initialized = false;
 
+// Track which users have voted on which reports (Set of "reportId:userId")
+const upvoteRegistry = new Set();
+
 // ─── Init & Seed ───
 export const getDatabase = async () => {
   if (initialized) return;
   initialized = true;
 
-  // Seed with mock data
   reports = SEED_REPORTS.map((r, i) => ({
     id: i + 1,
     ...r,
@@ -85,10 +85,22 @@ export const createReport = async ({ title, description, category, severity, lat
   return id;
 };
 
-export const upvoteReport = async (id) => {
+/**
+ * Upvote a report — strict one-vote-per-user enforcement.
+ * Returns { ...report, municipalTriggered, alreadyVoted }
+ */
+export const upvoteReport = async (id, userId = 'anon') => {
   const report = reports.find((r) => r.id === id);
   if (!report) throw new Error('Report not found');
 
+  // Unique vote check: "reportId:userId"
+  const voteKey = `${id}:${userId}`;
+  if (upvoteRegistry.has(voteKey)) {
+    return { ...report, municipalTriggered: false, alreadyVoted: true };
+  }
+
+  // Register the vote and increment
+  upvoteRegistry.add(voteKey);
   report.upvotes += 1;
 
   // Municipal Loop: auto-trigger at 10 upvotes
@@ -97,10 +109,17 @@ export const upvoteReport = async (id) => {
     report.municipal_email_date = new Date().toISOString();
     report.status = 'municipal_notified';
     console.log(`[Guardian DB] Municipal Loop triggered for report #${id}`);
-    return { ...report, municipalTriggered: true };
+    return { ...report, municipalTriggered: true, alreadyVoted: false };
   }
 
-  return { ...report, municipalTriggered: false };
+  return { ...report, municipalTriggered: false, alreadyVoted: false };
+};
+
+/**
+ * Check if a user already voted on a report.
+ */
+export const hasUserVoted = (reportId, userId = 'anon') => {
+  return upvoteRegistry.has(`${reportId}:${userId}`);
 };
 
 // ─── SafeZone Queries ───

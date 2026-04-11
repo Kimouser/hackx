@@ -20,7 +20,8 @@
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" http://localhost:8081)",
       "Bash(taskkill //F //IM node.exe)",
       "Bash(curl -s -o /dev/null -w \"HTTP_STATUS: %{http_code}\\\\n\" http://localhost:8081)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx jest:*)"
     ]
   }
 }

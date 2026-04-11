@@ -17,7 +17,7 @@ const categoryLabels = {
   other: '📌 Other',
 };
 
-const ThreatCard = ({ report, onUpvote }) => {
+const ThreatCard = ({ report, onUpvote, voted = false }) => {
   const sevColor = severityColors[report.severity] || colors.warning;
 
   return (
@@ -42,9 +42,17 @@ const ThreatCard = ({ report, onUpvote }) => {
       ) : null}
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.upvoteBtn} onPress={() => onUpvote?.(report.id)}>
-          <Text style={styles.upvoteArrow}>▲</Text>
-          <Text style={styles.upvoteCount}>{report.upvotes}</Text>
+        <TouchableOpacity
+          style={[styles.upvoteBtn, voted && styles.upvoteBtnVoted]}
+          onPress={() => onUpvote?.(report.id)}
+          disabled={voted}
+        >
+          <Text style={[styles.upvoteArrow, voted && styles.votedText]}>
+            {voted ? '✓' : '▲'}
+          </Text>
+          <Text style={[styles.upvoteCount, voted && styles.votedText]}>
+            {report.upvotes}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.time}>
@@ -133,6 +141,14 @@ const styles = StyleSheet.create({
     color: colors.safe,
     fontSize: 14,
     fontWeight: '700',
+  },
+  upvoteBtnVoted: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  votedText: {
+    color: colors.textMuted,
   },
   time: {
     color: colors.textMuted,
