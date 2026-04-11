@@ -1,6 +1,6 @@
 /**
  * MapScreen.jsx  –  Project Guardian
- * Added: Live Search Autocomplete with Debouncing
+ * Features: Autocomplete Search, Dynamic Location Stats, Legend Dropdown, New Icons
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -65,12 +65,13 @@ const MapScreen = () => {
   const [userLocName, setUserLocName] = useState('Ahmedabad, GJ');
   const [isLocating, setIsLocating] = useState(false);
   
-  // ─── NEW: Autocomplete State ───
+  // ─── Autocomplete & Legend State ───
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const debounceTimeout = useRef(null); // Keeps track of typing pauses
+  const [showLegend, setShowLegend] = useState(false); // NEW Legend State
+  const debounceTimeout = useRef(null);
 
   const toggleSidebar = useCallback(() => {
     const next = sidebarOpen ? 0 : 1;
@@ -131,25 +132,20 @@ const MapScreen = () => {
     } catch (error) { console.error(error); } finally { setIsLocating(false); }
   };
 
-  // ─── NEW: Handle User Typing (Debounced) ───
   const handleSearchInputChange = (text) => {
     setSearchQuery(text);
     
-    // Clear list if text is too short
     if (text.length < 3) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
 
-    // Clear previous timer if user keeps typing
     if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
 
-    // Set new timer to fetch suggestions after 500ms of no typing
     debounceTimeout.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        // limit=5 keeps the dropdown clean
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&limit=5&addressdetails=1`);
         const data = await res.json();
         setSuggestions(data || []);
@@ -162,13 +158,12 @@ const MapScreen = () => {
     }, 500);
   };
 
-  // ─── NEW: Handle Clicking a Suggestion ───
   const handleSelectSuggestion = (item) => {
     Keyboard.dismiss();
     setShowSuggestions(false);
     
     const destName = item.display_name.split(',')[0]; 
-    setSearchQuery(destName); // Update bar to chosen name
+    setSearchQuery(destName); 
 
     const destLat = parseFloat(item.lat);
     const destLng = parseFloat(item.lon);
@@ -205,6 +200,7 @@ const MapScreen = () => {
 
   const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
 
+  // ─── Dynamic Location Filter ───
   const isNearby = (lat, lng) => {
     const threshold = 0.3; 
     return Math.abs(lat - mapCenter.lat) < threshold && Math.abs(lng - mapCenter.lng) < threshold;
@@ -252,7 +248,6 @@ const MapScreen = () => {
       {!isSOSActive && (
         <View style={styles.legendBar}>
           
-          {/* ── UPDATED: Search Wrapper with Dropdown ── */}
           <View style={styles.searchWrapper}>
             <View style={styles.searchContainer}>
               <TextInput
@@ -260,14 +255,13 @@ const MapScreen = () => {
                 placeholder="Search destination..."
                 placeholderTextColor={C.textMuted}
                 value={searchQuery}
-                onChangeText={handleSearchInputChange} // Uses debounced function
+                onChangeText={handleSearchInputChange} 
               />
               <View style={styles.searchButton}>
                 {isSearching ? <ActivityIndicator size="small" color={C.purpleBright} /> : <Text>🔍</Text>}
               </View>
             </View>
 
-            {/* The Autocomplete Dropdown Box */}
             {showSuggestions && suggestions.length > 0 && (
               <View style={styles.suggestionsDropdown}>
                 <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
@@ -286,17 +280,30 @@ const MapScreen = () => {
             )}
           </View>
 
-          <View style={styles.legendItemGroup}>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones ({activeSafeZones.length})</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats ({activeThreats.length})</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.purple }]} /><Text style={styles.legendLabel}>Safe Paths</Text></View>
+          {/* ── NEW: Legend Dropdown on the Right ── */}
+          <View style={styles.legendWrapper}>
+            <TouchableOpacity 
+              style={styles.legendTrigger} 
+              onPress={() => setShowLegend(!showLegend)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.legendTriggerText}>Map Legend {showLegend ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {showLegend && (
+              <View style={styles.legendDropdown}>
+                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.teal }]} /><Text style={styles.legendLabel}>Safe Zones ({activeSafeZones.length})</Text></View>
+                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.threat }]} /><Text style={styles.legendLabel}>Threats ({activeThreats.length})</Text></View>
+                <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: C.purple }]} /><Text style={styles.legendLabel}>Safe Paths</Text></View>
+              </View>
+            )}
           </View>
+
         </View>
       )}
 
       {!isSOSActive && (
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: panelTranslate }] }]}>
-          {/* ... Sidebar contents remain unchanged ... */}
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarContent}>
             <TouchableOpacity style={styles.locRow} onPress={handleLocateMe} activeOpacity={0.7}>
               <View style={[styles.locDot, isLocating && { backgroundColor: C.teal, shadowColor: C.teal }]} />
@@ -349,7 +356,6 @@ const styles = StyleSheet.create({
   
   legendBar: { position: 'absolute', top: 0, left: SIDEBAR_W, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 20, backgroundColor: 'rgba(14,14,26,0.95)', zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
   
-  // ─── NEW: Autocomplete Styles ───
   searchWrapper: { width: 300, position: 'relative', zIndex: 999 },
   searchContainer: { width: '100%', height: 36, flexDirection: 'row', backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.border },
   searchInput: { flex: 1, color: C.text, paddingHorizontal: 12, fontSize: 13, outlineStyle: 'none' },
@@ -357,7 +363,7 @@ const styles = StyleSheet.create({
   
   suggestionsDropdown: {
     position: 'absolute',
-    top: 42, // Sits right underneath the search bar
+    top: 42,
     left: 0,
     right: 0,
     backgroundColor: C.surface,
@@ -379,10 +385,39 @@ const styles = StyleSheet.create({
   suggestionTitle: { color: C.text, fontSize: 13, fontWeight: '600' },
   suggestionSubtitle: { color: C.textSub, fontSize: 11, marginTop: 2 },
 
-  legendItemGroup: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendLabel: { color: C.textSub, fontSize: 11 },
+  // ─── NEW: Legend Dropdown Styles ───
+  legendWrapper: { position: 'relative', zIndex: 999 },
+  legendTrigger: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: C.surface, 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 6, 
+    borderWidth: 1, 
+    borderColor: C.border 
+  },
+  legendTriggerText: { color: C.text, fontSize: 13, fontWeight: '600' },
+  legendDropdown: { 
+    position: 'absolute', 
+    top: 42, 
+    right: 0, 
+    backgroundColor: C.surface, 
+    padding: 14, 
+    borderRadius: 6, 
+    borderWidth: 1, 
+    borderColor: C.border, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.5, 
+    shadowRadius: 10, 
+    elevation: 10, 
+    gap: 12, 
+    minWidth: 160 
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendLabel: { color: C.text, fontSize: 12, fontWeight: '500' },
+  
   previewContainer: { position: 'absolute', top: 70, right: 20, zIndex: 100, maxHeight: '75%' },
 
   sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100, ...Platform.select({ ios: {}, android: { elevation: 12 } }) },
