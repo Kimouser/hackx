@@ -90,10 +90,6 @@ export default function PanicButton({ onBeforeSOSTrigger }) {
 
   return (
     <View style={styles.centerContainer}>
-      <Text style={styles.instructionText}>
-        {sosState === SOS_STATE.IDLE ? 'HOLD TO ACTIVATE SOS' : 'SOS ACTIVE...'}
-      </Text>
-
       <View style={{ width: BUTTON_SIZE, height: BUTTON_SIZE, alignItems: 'center', justifyContent: 'center' }}>
         <Svg width={BUTTON_SIZE} height={BUTTON_SIZE} style={StyleSheet.absoluteFill}>
           <Circle cx={BUTTON_SIZE / 2} cy={BUTTON_SIZE / 2} r={RING_RADIUS} stroke="#3d0a0a" strokeWidth={RING_STROKE} fill="none" />
