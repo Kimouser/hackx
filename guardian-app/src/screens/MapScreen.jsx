@@ -16,7 +16,6 @@ import { AHMEDABAD } from '../utils/location';
 import { summarizeJourney } from '../services/journeyAI';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
 
-// ─── ADD CURRENT_LOCATION_ICON HERE ───
 import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
 const C = {
@@ -43,7 +42,7 @@ const CURRENT_JOURNEY = {
 
 const MOCK_STATS = { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 };
 
-function ScoreRing({ score }) { /* ... Keep existing ... */ 
+function ScoreRing({ score }) { 
   return (
     <View style={styles.ringOuter}>
       <View style={styles.ringInner}>
@@ -54,7 +53,7 @@ function ScoreRing({ score }) { /* ... Keep existing ... */
   );
 }
 
-function StatTile({ icon, value, label, accent }) { /* ... Keep existing ... */
+function StatTile({ icon, value, label, accent }) { 
   return (
     <View style={[styles.statTile, accent && styles.statTileAccent]}>
       <Text style={styles.statIcon}>{icon}</Text>
@@ -64,7 +63,7 @@ function StatTile({ icon, value, label, accent }) { /* ... Keep existing ... */
   );
  }
 
-function LayerToggle({ label, icon, active, color, onPress }) { /* ... Keep existing ... */
+function LayerToggle({ label, icon, active, color, onPress }) { 
   const dotColor = color ?? C.purple;
   return (
     <TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}>
@@ -80,7 +79,7 @@ const MapScreen = () => {
   const [safeZones, setSafeZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [journeyLoading, setJourneyLoading] = useState(false);
-  const [journeySummary, setJourneySummary] = useState(null);
+  const [journeySummary, setJourneySummary] = useState(CURRENT_JOURNEY); // Initialized instantly so it doesn't hide
   const [showPaths, setShowPaths] = useState(true);
   const [showThreats, setShowThreats] = useState(true);
   const [showSafeZones, setShowSafeZones] = useState(true);
@@ -90,10 +89,9 @@ const MapScreen = () => {
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
 
-  // ─── DEMO MODE GPS LOGIC ───
-  // We start with a mock location in Ahmedabad for the demo
-  const [userLocation, setUserLocation] = useState({ lat: 23.0225, lng: 72.5714 }); 
-  const [mapCenter, setMapCenter] = useState({ lat: 23.0225, lng: 72.5714 });
+  // ─── GPS & SEARCH STATE ───
+  const [userLocation, setUserLocation] = useState(null); 
+  const [mapCenter, setMapCenter] = useState({ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude });
   const [userLocName, setUserLocName] = useState('Ahmedabad, GJ');
   const [isLocating, setIsLocating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,7 +122,6 @@ const MapScreen = () => {
 
   useEffect(() => { loadData(); loadJourneySummary(); }, [loadData]);
 
-  // Real GPS fetcher (Will override mock data when clicked)
   const handleLocateMe = async () => {
     setIsLocating(true);
     try {
@@ -176,19 +173,12 @@ const MapScreen = () => {
 
   const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
 
-  // Add the User Location Pin to the map data alongside zones and threats
   const mapSafeZones = showSafeZones ? safeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
-  const mapThreats = showThreats ? threats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
+  let mapThreats = showThreats ? threats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
   
-  // Create an array with just the user location marker
-  const userMarkerData = [{
-      lat: userLocation.lat,
-      lng: userLocation.lng,
-      svgHtml: CURRENT_LOCATION_ICON()
-  }];
-
-  // We combine the user marker with threats so it renders via LeafletMap easily
-  const combinedMapMarkers = [...mapThreats, ...userMarkerData];
+  if (userLocation) {
+    mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
+  }
 
   return (
     <View style={styles.root}>
@@ -196,7 +186,7 @@ const MapScreen = () => {
       <LeafletMap
         center={mapCenter}
         zoom={13}
-        threats={combinedMapMarkers} // Pass threats + user location
+        threats={mapThreats}
         safeZones={mapSafeZones}
         safePaths={showPaths ? SAFE_PATHS : []}
         tileUrl={TILE_URL}
@@ -204,7 +194,7 @@ const MapScreen = () => {
         pathColor={ICON_COLORS.path}
       />
 
-      {/* ── NEW: Top Center Search Bar ── */}
+      {/* ── NEW: Top Left Search Bar (Resized & Relocated) ── */}
       {!isSOSActive && (
         <View style={styles.searchContainer}>
           <TextInput
@@ -221,13 +211,15 @@ const MapScreen = () => {
         </View>
       )}
 
-      {/* ── RESTORED: Journey Preview ── */}
+      {/* ── RESTORED: Journey Preview at Original Coordinates ── */}
       {journeySummary && (
-        <JourneySummaryPopup
-          summary={journeySummary}
-          loading={journeyLoading}
-          onRefresh={loadJourneySummary}
-        />
+        <View style={{ position: 'absolute', top: 60, right: 20, zIndex: 100 }}>
+          <JourneySummaryPopup
+            summary={journeySummary}
+            loading={journeyLoading}
+            onRefresh={loadJourneySummary}
+          />
+        </View>
       )}
 
       {!isSOSActive && (
@@ -291,15 +283,14 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', gap: 14 },
   loadingText: { color: C.textSub, fontSize: 13, letterSpacing: 1 },
   
-  // ─── ADJUSTED: Search Bar positioned Top Center ───
+  // ─── ADJUSTED: Search Bar positioned Top-Left, Decreased Size ───
   searchContainer: {
     position: 'absolute', 
-    top: 50, 
-    left: '50%',                     // Center horizontally
-    transform: [{ translateX: -300 }], // Offset by half the width to truly center it
+    top: 15,                     // Aligned closer to the top tab height
+    left: SIDEBAR_W + 20,        // Placed next to the sidebar / Project Guardian logo area
     width: '100%',
-    maxWidth: 600,                   // Kept slightly smaller than 980px so it doesn't overlap sidebar/preview
-    height: 40,                      // Close to the ~30px you requested
+    maxWidth: 350,               // Decreased size considerably (approx 4-5 cm narrower)
+    height: 38,                  // Slightly slimmer profile
     flexDirection: 'row', 
     backgroundColor: C.panel,
     borderRadius: 8, 
