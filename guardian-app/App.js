@@ -6,12 +6,16 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { getDatabase } from './src/db/database';
 import colors from './src/theme/colors';
 
-// ─── STEP 1: ADD TEST TOGGLE ──────────────────────────────────────────
-// Set this to true to see the SOS Button. Set to false for your Map.
-const TEST_MODE = true; 
+// ─── EMERGENCY MODULE INTEGRATION ──────────────────────────────────────────
+import { SOSProvider } from './src/modules/emergency';
 
-import ExampleScreen from './src/screens/ExampleScreen'; 
-// ───────────────────────────────────────────────────────────────────────
+// Configure your real demo data here
+const CURRENT_USER = { name: 'Falgun' }; 
+const EMERGENCY_CONTACTS = [
+  { name: 'Mom', phone: '+91XXXXXXXXXX' },
+  { name: 'Rahul', phone: '+91XXXXXXXXXX' },
+];
+// ───────────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [dbReady, setDbReady] = useState(false);
@@ -29,7 +33,6 @@ export default function App() {
     init();
   }, []);
 
-  // Keep your splash screen active while DB loads
   if (!dbReady) {
     return (
       <View style={styles.splash}>
@@ -44,31 +47,17 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      
-      {/* ─── STEP 2: RENDER SWITCH ─── */}
-      {TEST_MODE ? (
-        <ExampleScreen />
-      ) : (
+      <SOSProvider user={CURRENT_USER} contacts={EMERGENCY_CONTACTS}>
+        <StatusBar style="light" />
         <AppNavigator />
-      )}
+      </SOSProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  splash: { flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' },
   splashIcon: { fontSize: 80, marginBottom: 12 },
-  splashTitle: {
-    fontSize: 28, fontWeight: '800',
-    color: colors.safe, letterSpacing: 0.5,
-  },
-  splashSub: {
-    color: colors.textMuted, fontSize: 13, marginTop: 12,
-  },
+  splashTitle: { fontSize: 28, fontWeight: '800', color: colors.safe, letterSpacing: 0.5 },
+  splashSub: { color: colors.textMuted, fontSize: 13, marginTop: 12 },
 });

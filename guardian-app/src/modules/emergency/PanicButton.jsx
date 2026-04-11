@@ -206,5 +206,5 @@ const styles = StyleSheet.create({
   emergencyIcon: { fontSize: 64, marginBottom: 20 },
   escalatedTitle: { color: '#ff4444', fontSize: 24, fontWeight: '900', letterSpacing: 2, textAlign: 'center', marginBottom: 10 },
   divider: { width: 40, height: 4, backgroundColor: '#ff4444', borderRadius: 2, marginVertical: 15 },
-  disclaimerTextBright: { color: '#bbb', fontSize: 15, textAlign: 'center', paddingHorizontal: 30, lineHeight: 24 },
+  disclaimerTextBright: { color: '#cb1616', fontSize: 15, textAlign: 'center', paddingHorizontal: 30, lineHeight: 24 },
 });
