@@ -84,40 +84,21 @@ const ReportScreen = ({ navigation }) => {
     }
   };
 
-  const handleAddPhoto = () => {
-    Alert.alert(
-      'Add Photo',
-      'Choose a source for your photo',
-      [
-        {
-          text: 'Take Photo',
-          onPress: takePhoto,
-        },
-        {
-          text: 'Choose from Gallery',
-          onPress: pickPhoto,
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
-  };
-
-  const pickPhoto = async () => {
+  const handleAddPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Camera roll permission is required to add photos.');
         return;
       }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
+
       if (!result.canceled) {
         setPhotoUri(result.assets[0].uri);
       }
@@ -126,7 +107,7 @@ const ReportScreen = ({ navigation }) => {
     }
   };
 
-  const takePhoto = async () => {
+  const pickPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
@@ -142,7 +123,7 @@ const ReportScreen = ({ navigation }) => {
         setPhotoUri(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to take photo: ' + error.message);
+      Alert.alert('Error', 'Failed to capture photo: ' + error.message);
     }
   };
 
