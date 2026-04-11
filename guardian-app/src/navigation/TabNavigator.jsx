@@ -13,19 +13,25 @@ const TabNavigator = () => {
     <Tab.Navigator
       screenOptions={{
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
+          backgroundColor: 'rgba(10,10,20,0.92)',
+          borderTopColor: 'rgba(255,255,255,0.05)',
           borderTopWidth: 1,
-          height: Platform.OS === 'web' ? 60 : 65,
-          paddingBottom: Platform.OS === 'web' ? 8 : 12,
+          height: Platform.OS === 'web' ? 58 : 65,
+          paddingBottom: Platform.OS === 'web' ? 6 : 12,
           paddingTop: 6,
+          ...(Platform.OS === 'web' ? { backdropFilter: 'blur(16px)' } : {}),
         },
         tabBarActiveTintColor: colors.safe,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-        headerStyle: { backgroundColor: colors.bg },
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.3)',
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+        headerStyle: {
+          backgroundColor: '#0d0d1a',
+          borderBottomWidth: 1,
+          borderBottomColor: 'rgba(255,255,255,0.05)',
+          ...(Platform.OS === 'web' ? { boxShadow: 'none' } : {}),
+        },
         headerTintColor: colors.safe,
-        headerTitleStyle: { fontWeight: '700' },
+        headerTitleStyle: { fontWeight: '700', fontSize: 17 },
       }}
     >
       <Tab.Screen
@@ -33,10 +39,10 @@ const TabNavigator = () => {
         component={MapScreen}
         options={{
           title: 'Safe Map',
+          headerShown: false,
           tabBarIcon: ({ focused }) => (
             <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>🗺️</Text>
           ),
-          headerTitle: '🛡️ Project Guardian',
         }}
       />
       <Tab.Screen

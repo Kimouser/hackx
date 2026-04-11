@@ -6,7 +6,7 @@ import {
 import colors from '../theme/colors';
 import { createReport } from '../db/database';
 import { sendMunicipalEmail } from '../services/municipalService';
-import { AHMEDABAD } from '../utils/location';
+import { MUMBAI } from '../utils/location';
 
 const CATEGORIES = [
   { key: 'harassment', label: 'Harassment', icon: '⚠️' },
@@ -47,8 +47,8 @@ const ReportScreen = () => {
         description: description.trim(),
         category,
         severity,
-        latitude: AHMEDABAD.latitude + (Math.random() - 0.5) * 0.02,
-        longitude: AHMEDABAD.longitude + (Math.random() - 0.5) * 0.02,
+        latitude: MUMBAI.latitude + (Math.random() - 0.5) * 0.02,
+        longitude: MUMBAI.longitude + (Math.random() - 0.5) * 0.02,
       });
 
       // Mock Municipal Loop — log the "email" to console
@@ -58,8 +58,8 @@ const ReportScreen = () => {
         description: description.trim(),
         category,
         severity,
-        latitude: AHMEDABAD.latitude,
-        longitude: AHMEDABAD.longitude,
+        latitude: MUMBAI.latitude,
+        longitude: MUMBAI.longitude,
         upvotes: 0,
       });
 
@@ -156,7 +156,7 @@ const ReportScreen = () => {
         <View style={styles.locationBar}>
           <Text style={styles.locationIcon}>📍</Text>
           <Text style={styles.locationText}>
-            Pin: Ahmedabad ({AHMEDABAD.latitude.toFixed(4)}°N, {AHMEDABAD.longitude.toFixed(4)}°E)
+            Pin: Ahmedabad ({MUMBAI.latitude.toFixed(4)}°N, {MUMBAI.longitude.toFixed(4)}°E)
           </Text>
         </View>
 
