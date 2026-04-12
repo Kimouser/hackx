@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, FlatList, RefreshControl, Alert, TouchableOpacity, Image,
@@ -142,7 +142,27 @@ const DashboardScreen = () => {
         data={filteredReports}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => (
-          <ThreatCard report={item} onUpvote={handleUpvote} />
+          <View>
+            {/* AI Status Badge */}
+            <View style={[
+              styles.aiBadge, 
+              { backgroundColor: item.status === 'active' ? '#06d6a022' : '#ff3c3c22' }
+            ]}>
+              <Text style={[
+                styles.aiBadgeText, 
+                { color: item.status === 'active' ? '#06d6a0' : '#ff3c3c' }
+              ]}>
+                {item.status === 'active' ? '🛡️ AI VERIFIED' : '⚠️ AI FLAGGED'}
+              </Text>
+            </View>
+            
+            <ThreatCard report={item} onUpvote={handleUpvote} />
+            
+            {/* Show Gemini's reasoning in a small text if it's a priority report */}
+            {item.upvotes > 5 && item.ai_reason && (
+              <Text style={styles.aiReason}>AI Insight: {item.ai_reason}</Text>
+            )}
+          </View>
         )}
         contentContainerStyle={styles.list}
         refreshControl={
@@ -166,7 +186,6 @@ const DashboardScreen = () => {
   );
 };
 
-// Styles remain the same as your provided code
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { padding: 20, paddingBottom: 12 },
@@ -196,6 +215,27 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.textSecondary, fontSize: 16 },
   emptySub: { color: colors.textMuted, fontSize: 12, marginTop: 4, textAlign: 'center' },
+  aiBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginLeft: 16,
+    marginBottom: -10, // Overlap slightly with the ThreatCard
+    zIndex: 10,
+  },
+  aiBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  aiReason: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontStyle: 'italic',
+    marginLeft: 20,
+    marginBottom: 10,
+  },
 });
 
 export default DashboardScreen;
