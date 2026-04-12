@@ -1,6 +1,6 @@
 /**
- * MapScreen.jsx  –  Project Guardian
- * Fixed: Restored Safe Paths, Updated Location Label, & Fixed Web Icons
+ * MapScreen.jsx – Project Guardian
+ * STATUS: Fixed Syntax + Supabase Integrated + Weighted A* Enabled
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -12,9 +12,9 @@ import * as Location from 'expo-location';
 
 import LeafletMap from '../components/LeafletMap';
 import { getMapOverlay } from '../db/database';
+import { calculateSafePath } from '../services/navigationService'; 
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
 import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
-
 
 const C = {
   bg: '#080810', panel: 'rgba(14,14,26,0.95)', panelBorder: '#1e1e35',
@@ -23,28 +23,14 @@ const C = {
   text: '#e8e6f0', textSub: '#9895b0', textMuted: '#504d6a', border: '#1e1e35',
 };
 
-const TILE_URL = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png';
-const TILE_ATTRIBUTION = '&copy; Stadia Maps';
+const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTRIBUTION = '&copy; <a href="https://carto.com/">CARTO</a>';
 
-// ─── RESTORED: Safe Paths (Mumbai Station to Campus Route) ───
-const SAFE_PATHS = [
-  { 
-    coords: [
-      [19.0798, 72.8988], // Vidyavihar Station
-      [19.0770, 72.8990], 
-      [19.0750, 72.8992], 
-      [19.0730, 72.8995]  // Somaiya Campus
-    ] 
-  }
-];
-
+// --- Internal Helper Components ---
 const LegendRow = ({ icon, label, sub }) => (
   <View style={styles.legendItem}>
     {Platform.OS === 'web' ? (
-      <div 
-        style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
-        dangerouslySetInnerHTML={{ __html: icon }} 
-      />
+      <div style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }} dangerouslySetInnerHTML={{ __html: icon }} />
     ) : (
       <View style={styles.legendIconPlaceholder} />
     )}
@@ -59,72 +45,76 @@ function ScoreRing({ score }) { return (<View style={styles.ringOuter}><View sty
 function StatTile({ icon, value, label, accent }) { return (<View style={[styles.statTile, accent && styles.statTileAccent]}><Text style={styles.statIcon}>{icon}</Text><Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>); }
 function LayerToggle({ label, icon, active, color, onPress }) { const dotColor = color ?? C.purple; return (<TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}><Text style={styles.layerIcon}>{icon}</Text><Text style={[styles.layerLabel, active && { color: dotColor }]}>{label}</Text><View style={[styles.pill, active && { backgroundColor: dotColor }]}><View style={[styles.pillKnob, active && styles.pillKnobOn]} /></View></TouchableOpacity>); }
 
+const SIDEBAR_W = 220;
+
 const MapScreen = () => {
+  // Data State
   const [threats, setThreats] = useState([]);
   const [safeZones, setSafeZones] = useState([]);
+  const [safePaths, setSafePaths] = useState([]); 
   const [loading, setLoading] = useState(true);
   
+  // UI State
   const [showPaths, setShowPaths] = useState(true);
   const [showThreats, setShowThreats] = useState(true);
   const [showSafeZones, setShowSafeZones] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showLegend, setShowLegend] = useState(false); 
   
+  // Animation & Search
   const sidebarAnim = useRef(new Animated.Value(1)).current;
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
-
-  // ─── FIXED: Initialized to Mumbai for your demo ───
-  const [userLocation, setUserLocation] = useState({ lat: 19.0730, lng: 72.8995 }); 
-  const [mapCenter, setMapCenter] = useState({ lat: 19.0730, lng: 72.8995 });
-  const [userLocName, setUserLocName] = useState('Mumbai, MH');
-  const [isLocating, setIsLocating] = useState(false);
-  
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [showLegend, setShowLegend] = useState(false); 
   const debounceTimeout = useRef(null);
+
+  // Map Focus
+  const [mapCenter, setMapCenter] = useState({ lat: 19.0730, lng: 72.8995 });
+  const [userLocation, setUserLocation] = useState({ lat: 19.0730, lng: 72.8995 });
+  const [userLocName, setUserLocName] = useState('Mumbai, MH');
 
   const toggleSidebar = useCallback(() => {
     const next = sidebarOpen ? 0 : 1;
     Animated.spring(sidebarAnim, { toValue: next, tension: 80, friction: 12, useNativeDriver: true }).start();
     setSidebarOpen(p => !p);
-  }, [sidebarOpen]);
+  }, [sidebarOpen, sidebarAnim]);
 
+  // Load Data from Supabase and calculate initial path
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const overlay = await getMapOverlay();
-      setThreats(overlay.threats || []);
-      setSafeZones(overlay.safeZones || []);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+      const data = await getMapOverlay();
+      setThreats(data.threats || []);
+      setSafeZones(data.safeZones || []);
+      
+      // Calculate initial demo path: Vidyavihar Station to Somaiya Campus
+      if (data.threats) {
+        const path = calculateSafePath([19.0798, 72.8988], [19.0730, 72.8995], data.threats);
+        setSafePaths([{ coords: path }]);
+      }
+    } catch (err) { 
+      console.error("[Map] Load Failed:", err); 
+    } finally { 
+      setLoading(false); 
+    }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleLocateMe = async () => {
-    setIsLocating(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const lat = location.coords.latitude;
-      const lng = location.coords.longitude;
-      
-      setUserLocation({ lat, lng });
-      setMapCenter({ lat, lng });
-
-      // Dynamic reverse geocoding to fix the label
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-        const data = await res.json();
-        if (data && data.address) {
-          const city = data.address.city || data.address.town || data.address.suburb || 'Mumbai';
-          setUserLocName(`${city}, MH`);
-        }
-      } catch (err) { setUserLocName('Mumbai, MH'); }
-    } catch (error) { console.error(error); } finally { setIsLocating(false); }
+      const newLoc = { lat: location.coords.latitude, lng: location.coords.longitude };
+      setUserLocation(newLoc);
+      setMapCenter(newLoc);
+    } catch (error) { 
+      console.error("[Location] Error:", error); 
+    }
   };
 
   const handleSearchInputChange = (text) => {
@@ -138,30 +128,26 @@ const MapScreen = () => {
         const data = await res.json();
         setSuggestions(data || []);
         setShowSuggestions(true);
-      } catch (err) { console.error(err); } finally { setIsSearching(false); }
+      } catch (err) { 
+        console.error("[Search] Failed:", err); 
+      } finally { 
+        setIsSearching(false); 
+      }
     }, 500);
   };
 
   const handleSelectSuggestion = (item) => {
     Keyboard.dismiss();
     setShowSuggestions(false);
-    const name = item.display_name.split(',')[0];
-    setSearchQuery(name); 
-    setMapCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lon) });
-    setUserLocName(`${name}, MH`);
+    const lat = parseFloat(item.lat);
+    const lng = parseFloat(item.lon);
+    setSearchQuery(item.display_name.split(',')[0]); 
+    setMapCenter({ lat, lng });
+
+    // Recalculate A* Safe Path from current user position to new search destination
+    const newPath = calculateSafePath([userLocation.lat, userLocation.lng], [lat, lng], threats);
+    setSafePaths([{ coords: newPath }]);
   };
-
-  const isNearby = (lat, lng) => {
-    const threshold = 0.3; 
-    return Math.abs(lat - mapCenter.lat) < threshold && Math.abs(lng - mapCenter.lng) < threshold;
-  };
-
-  const activeSafeZones = safeZones.filter(z => isNearby(z.lat || z.latitude, z.lng || z.longitude));
-  const activeThreats = threats.filter(t => isNearby(t.lat || t.latitude, t.lng || t.longitude));
-
-  const mapSafeZones = showSafeZones ? activeSafeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
-  let mapThreats = showThreats ? activeThreats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
-  if (userLocation) mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
 
   if (loading) {
     return (
@@ -172,28 +158,29 @@ const MapScreen = () => {
     );
   }
 
-  const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
+  const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-SIDEBAR_W, 0] });
 
   return (
     <View style={styles.root}>
       <LeafletMap
         center={mapCenter}
         zoom={15}
-        threats={mapThreats}
-        safeZones={mapSafeZones}
-        safePaths={showPaths ? SAFE_PATHS : []} 
+        threats={showThreats ? threats.map(t => ({ ...t, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : []}
+        safeZones={showSafeZones ? safeZones.map(z => ({ ...z, svgHtml: safeZoneIcon(z.category, ICON_COLORS.safe) })) : []}
+        safePaths={showPaths ? safePaths : []} 
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
         pathColor={C.purple}
       />
 
+      {/* Solid Top Legend Bar */}
       {!isSOSActive && (
         <View style={styles.legendBar}>
           <View style={styles.searchWrapper}>
             <View style={styles.searchContainer}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search Mumbai..."
+                placeholder="Search location..."
                 placeholderTextColor={C.textMuted}
                 value={searchQuery}
                 onChangeText={handleSearchInputChange} 
@@ -220,35 +207,21 @@ const MapScreen = () => {
 
             {showLegend && (
               <View style={styles.legendDropdown}>
-                <Text style={styles.legendSectionHead}>SAFE LANDMARKS ({activeSafeZones.length})</Text>
+                <Text style={styles.legendSectionHead}>SAFE LANDMARKS</Text>
                 <View style={styles.legendGrid}>
-                  <LegendRow icon={safeZoneIcon('hospital')} label="Hospital / ER" />
+                  <LegendRow icon={safeZoneIcon('hospital')} label="Hospital" />
                   <LegendRow icon={safeZoneIcon('police')} label="Police Station" />
-                  <LegendRow icon={safeZoneIcon('fire')} label="Fire Brigade" />
-                  <LegendRow icon={safeZoneIcon('pharmacy')} label="24/7 Pharmacy" />
-                  <LegendRow icon={safeZoneIcon('railway')} label="Transport Hub" />
-                  <LegendRow icon={safeZoneIcon('market')} label="Public Market" />
-                  <LegendRow icon={safeZoneIcon('home')} label="Safe House" />
                 </View>
                 <View style={styles.legendDivider} />
-                <Text style={styles.legendSectionHead}>HAZARDS ({activeThreats.length})</Text>
-                <LegendRow icon={THREAT_ICON(ICON_COLORS.threat)} label="Community Threat" sub="Unsafe areas" />
-                <View style={styles.legendDivider} />
-                <Text style={styles.legendSectionHead}>NAVIGATION</Text>
-                <View style={styles.legendItem}>
-                   <View style={[styles.legendLine, { backgroundColor: C.purple }]} />
-                   <Text style={[styles.legendLabel, { marginLeft: 8 }]}>AI Safe Path</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={styles.currentLocCircle} />
-                  <Text style={[styles.legendLabel, { marginLeft: 8 }]}>Your Position</Text>
-                </View>
+                <Text style={styles.legendSectionHead}>HAZARDS</Text>
+                <LegendRow icon={THREAT_ICON(ICON_COLORS.threat)} label="Community Threat" />
               </View>
             )}
           </View>
         </View>
       )}
 
+      {/* Sliding Sidebar */}
       {!isSOSActive && (
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: panelTranslate }] }]}>
           <ScrollView contentContainerStyle={styles.sidebarContent}>
@@ -258,10 +231,10 @@ const MapScreen = () => {
             </TouchableOpacity>
             <View style={styles.divider} />
             <View style={styles.scoreRow}>
-              <ScoreRing score={activeSafeZones.length > 0 ? 82 : 0} />
+              <ScoreRing score={threats.length < 5 ? 82 : 45} />
               <View style={styles.statsGrid}>
-                <StatTile icon="⚠️" value={activeThreats.length} label="THREATS" />
-                <StatTile icon="🛡️" value={activeSafeZones.length} label="SAFE" accent />
+                <StatTile icon="⚠️" value={threats.length} label="THREATS" />
+                <StatTile icon="🛡️" value={safeZones.length} label="SAFE" accent />
               </View>
             </View>
             <View style={styles.divider} />
@@ -273,9 +246,21 @@ const MapScreen = () => {
         </Animated.View>
       )}
 
+      {/* Floating Chevron */}
+      {!isSOSActive && (
+        <Animated.View style={[styles.chevronWrap, { transform: [{ translateX: sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [0, SIDEBAR_W] }) }] }]}>
+          <TouchableOpacity onPress={toggleSidebar} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={styles.chevron}>{sidebarOpen ? '‹' : '›'}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* Emergency Overlays */}
       {isSOSActive ? <View style={styles.sosOverlay}><PanicButton /></View> : <View style={styles.sosFloat}><PanicButton /></View>}
     </View>
   );
+};
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -288,20 +273,16 @@ const styles = StyleSheet.create({
   suggestionsDropdown: { position: 'absolute', top: 42, left: 0, right: 0, backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.panelBorder, overflow: 'hidden' },
   suggestionItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: C.border },
   suggestionTitle: { color: C.text, fontSize: 13 },
-  
   legendWrapper: { position: 'relative', zIndex: 999 },
   legendTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: C.border },
   legendTriggerText: { color: C.text, fontSize: 13, fontWeight: '600' },
-  legendDropdown: { position: 'absolute', top: 42, right: 0, backgroundColor: C.surface, padding: 16, borderRadius: 8, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 15, elevation: 10, width: 240, gap: 12 },
+  legendDropdown: { position: 'absolute', top: 42, right: 0, backgroundColor: C.surface, padding: 16, borderRadius: 8, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 15, width: 240, gap: 12 },
   legendSectionHead: { color: C.purpleBright, fontSize: 9, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4 },
   legendGrid: { gap: 8 },
   legendItem: { flexDirection: 'row', alignItems: 'center' },
   legendLabel: { color: C.text, fontSize: 12, fontWeight: '600' },
   legendSubLabel: { color: C.textMuted, fontSize: 10 },
   legendDivider: { height: 1, backgroundColor: C.border, marginVertical: 4 },
-  legendLine: { width: 20, height: 3, borderRadius: 2 },
-  currentLocCircle: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#4285F4', borderWidth: 2, borderColor: '#fff' },
-
   sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100 },
   sidebarContent: { paddingTop: 48, paddingHorizontal: 14, gap: 14 },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -321,12 +302,14 @@ const styles = StyleSheet.create({
   statLabel: { color: C.textMuted, fontSize: 8 },
   divider: { height: 1, backgroundColor: C.border },
   sectionHead: { color: C.textMuted, fontSize: 9 },
-  layerRow: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: C.surface, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: C.border },
+  layerRow: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: C.surface, borderRadius: 10, padding: 10 },
   layerIcon: { fontSize: 13 },
   layerLabel: { flex: 1, color: C.textSub, fontSize: 11, fontWeight: '600' },
   pill: { width: 30, height: 17, borderRadius: 9, backgroundColor: C.panelBorder, padding: 2 },
   pillKnob: { width: 13, height: 13, borderRadius: 7, backgroundColor: C.textMuted },
   pillKnobOn: { backgroundColor: '#fff', marginLeft: 'auto' },
+  chevronWrap: { position: 'absolute', top: '50%', left: 0, marginTop: -24, width: 22, height: 48, backgroundColor: C.panel, borderTopRightRadius: 8, borderBottomRightRadius: 8, borderWidth: 1, borderLeftWidth: 0, borderColor: C.panelBorder, zIndex: 110 },
+  chevron: { color: C.purpleBright, fontSize: 16 },
   sosFloat: { position: 'absolute', bottom: 0, right: 0, transform: [{ scale: 0.75 }] },
   sosOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,8,16,0.97)', justifyContent: 'center', alignItems: 'center' },
 });
