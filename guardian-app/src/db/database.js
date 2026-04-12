@@ -1,102 +1,98 @@
 /**
- * database.js - Universal Guardian DB
- * Works on Web (localStorage) and Native (SQLite)
+ * database.js - Project Guardian (Supabase Edition)
+ * Redirects all local storage calls to the Live Cloud Database.
  */
-import { Platform } from 'react-native';
+import { createClient } from '@supabase/supabase-js';
 
-// Standardized store for Web/Development
-let webStore = {
-  reports: [],
-  safe_zones: [],
-  emergency_logs: []
-};
+// 1. Connection Setup
+// Replace these with the actual keys from your Supabase 'API Keys' screenshot
+const supabaseUrl = 'https://bwlmblglaslgasutxyyd.supabase.co';
+const supabaseKey = 'YOUR_ACTUAL_ANON_KEY_STARTING_WITH_eyJ'; // Found in image_16539e.png
 
-// ─── HELPER: Web Persistence ───
-const saveToWeb = () => {
-  if (Platform.OS === 'web') {
-    localStorage.setItem('guardian_db', JSON.stringify(webStore));
-  }
-};
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-const loadFromWeb = () => {
-  if (Platform.OS === 'web') {
-    const data = localStorage.getItem('guardian_db');
-    if (data) webStore = JSON.parse(data);
-  }
-};
+/** ─── CORE EXPORTS ─── */
 
-// ─── CORE EXPORTS ───
-
-/** Initializes tables/store */
-export const setupDatabase = async () => {
-  if (Platform.OS === 'web') {
-    loadFromWeb();
-    console.log('[Guardian DB] Web Storage Initialized');
-    return;
-  }
-  
-  // For Native (Phone), we would use real expo-sqlite here.
-  // But for your web demo, we keep the logic identical so nothing breaks.
-};
-
-/** Wipes the DB for fresh seeding */
-export const resetDatabase = async () => {
-  webStore = { reports: [], safe_zones: [], emergency_logs: [] };
-  if (Platform.OS === 'web') localStorage.removeItem('guardian_db');
-  console.log('[Guardian DB] Storage Reset');
-};
-
-/** Combined data fetch for MapScreen */
+/** Pulls EVERYTHING for the Map and Dashboard */
 export const getMapOverlay = async () => {
-  if (Platform.OS === 'web') loadFromWeb();
-  return { 
-    threats: webStore.reports, 
-    safeZones: webStore.safe_zones 
-  };
+  try {
+    // Fetch Live Threats (Reports)
+    const { data: threats, error: tErr } = await supabase
+      .from('reports')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    // Fetch Live Safe Zones
+    const { data: safeZones, error: sErr } = await supabase
+      .from('safe_zones')
+      .select('*');
+
+    if (tErr || sErr) throw (tErr || sErr);
+
+    // MAPPING: Ensure DB 'lat/lng' works with App 'latitude/longitude'
+    return {
+      threats: (threats || []).map(t => ({
+        ...t,
+        latitude: t.lat, // Crawler uses 'lat'
+        longitude: t.lng, // Crawler uses 'lng'
+      })),
+      safeZones: (safeZones || []).map(z => ({
+        ...z,
+        latitude: z.lat,
+        longitude: z.lng,
+      }))
+    };
+  } catch (err) {
+    console.error('[DB] Cloud Fetch Error:', err.message);
+    return { threats: [], safeZones: [] };
+  }
 };
 
-/** Create a new report */
+/** Create a new report from the 'Report' screen */
 export const createReport = async (data) => {
-  const newReport = {
-    id: Date.now(),
-    ...data,
-    upvotes: 0,
-    userUpvoted: 0,
-    created_at: new Date().toISOString()
-  };
-  webStore.reports.push(newReport);
-  saveToWeb();
-  return newReport.id;
+  const { data: result, error } = await supabase
+    .from('reports')
+    .insert([{
+      title: data.title,
+      category: data.category,
+      lat: data.latitude,
+      lng: data.longitude,
+      description: data.description || '',
+      upvotes: 0,
+      status: 'active'
+    }])
+    .select();
+
+  if (error) throw error;
+  return result[0].id;
 };
 
-/** Upvote logic */
+/** Dashboard Logic: Pulls all reports for the Priority Poll */
+export const getAllReports = async () => {
+  const { threats } = await getMapOverlay();
+  return threats;
+};
+
+/** Upvote logic for the Dashboard Poll */
 export const upvoteReport = async (id) => {
-  const report = webStore.reports.find(r => r.id === id);
-  if (!report) return null;
-
-  report.userUpvoted = report.userUpvoted ? 0 : 1;
-  report.upvotes = report.userUpvoted ? report.upvotes + 1 : report.upvotes - 1;
+  // 1. Fetch current upvotes
+  const { data: current } = await supabase.from('reports').select('upvotes').eq('id', id).single();
   
-  saveToWeb();
-  return { ...report, userUpvoted: !!report.userUpvoted };
-};
+  // 2. Increment
+  const { data: updated, error } = await supabase
+    .from('reports')
+    .update({ upvotes: (current?.upvotes || 0) + 1 })
+    .eq('id', id)
+    .select()
+    .single();
 
-/** Seed Helper (Called by seed.js) */
-export const getDB = async () => {
-  // We return a mock "db" object for web that seed.js can use
-  return {
-    runAsync: async (query, params) => {
-      if (query.includes('INSERT INTO safe_zones')) {
-        webStore.safe_zones.push({ name: params[0], type: params[1], latitude: params[2], longitude: params[3], address: params[4], phone: params[5], id: Date.now() + Math.random() });
-      } else if (query.includes('INSERT INTO reports')) {
-        webStore.reports.push({ title: params[0], category: params[1], latitude: params[2], longitude: params[3], upvotes: params[4], status: params[5], id: Date.now() + Math.random() });
-      }
-      saveToWeb();
-    }
-  };
+  if (error) throw error;
+  return { ...updated, userUpvoted: true };
 };
 
 export const logEmergency = async (type, lat, lng) => {
-  webStore.emergency_logs.push({ type, lat, lng, time: new Date().toISOString() });
-  saveToWeb();
+  await supabase.from('emergency_logs').insert([{ trigger_type: type, lat, lng, status: 'triggered' }]);
 };
+
+export const setupDatabase = async () => console.log('[Guardian DB] Cloud Sync Active');
+export const resetDatabase = async () => console.warn('Wipe ignored: Manage Cloud data via Dashboard.');
