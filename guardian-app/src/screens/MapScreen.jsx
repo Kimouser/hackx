@@ -1,176 +1,156 @@
 /**
  * MapScreen.jsx  –  Project Guardian
- *
- * Changes in this revision:
- * • Safe zones → teal (#06d6a0) to contrast purple paths + red threats
- * • Safe paths → follow Ahmedabad road grid (right-angle turns, no diagonal cuts)
- * • JourneySummaryPopup integrated alongside Map layers
- * • Minimalist SVG icons injected directly into Leaflet data props
- *
- * Drop into: src/screens/MapScreen.jsx
+ * THE CLEAN VERSION: CARTO Tiles, Mobile-Responsive Sidebar, Mumbai Defaults
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-  ScrollView,
-  Animated,
-  Platform,
+  View, Text, StyleSheet, ActivityIndicator, TouchableOpacity,
+  ScrollView, Animated, Platform, TextInput, Keyboard, useWindowDimensions
 } from 'react-native';
+import * as Location from 'expo-location';
 
 import LeafletMap from '../components/LeafletMap';
-import JourneySummaryPopup from '../components/JourneySummaryPopup';
 import { getMapOverlay } from '../db/database';
-import { AHMEDABAD } from '../utils/location';
-import { summarizeJourney } from '../services/journeyAI';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
+import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
-// ─── UPDATED IMPORT: Pull in the specific icon generators ───
-import { ICON_COLORS, safeZoneIcon, THREAT_ICON } from '../modules/map/MapIcons';
-
-// ─── Colour palette ────────────────────────────────────────────────────────────
 const C = {
-  bg:          '#080810',
-  panel:       'rgba(14,14,26,0.95)',
-  panelBorder: '#1e1e35',
-  surface:     '#13131f',
-  purple:      '#7c4dff',
-  purpleDim:   'rgba(124,77,255,0.14)',
-  purpleBright:'#a07dff',
-  teal:        '#06d6a0',
-  tealDim:     'rgba(6,214,160,0.12)',
-  threat:      '#ff3c3c',
-  text:        '#e8e6f0',
-  textSub:     '#9895b0',
-  textMuted:   '#504d6a',
-  border:      '#1e1e35',
+  bg: '#080810', panel: 'rgba(14,14,26,0.95)', panelBorder: '#1e1e35',
+  surface: '#13131f', purple: '#7c4dff', purpleBright: '#a07dff',
+  teal: '#06d6a0', tealDim: 'rgba(6,214,160,0.12)', threat: '#ff3c3c',
+  text: '#e8e6f0', textSub: '#9895b0', textMuted: '#504d6a', border: '#1e1e35',
 };
 
+// ─── NEW: 100% FREE CARTO DARK TILES (Fixes 401 Error) ───
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://carto.com/">CARTO</a>';
+
+// ─── MUMBAI ROUTE: Vidyavihar Station to Somaiya Campus ───
 const SAFE_PATHS = [
-  { coords: [ [23.0305, 72.5653], [23.0305, 72.5580], [23.0305, 72.5540], [23.0335, 72.5540], [23.0365, 72.5540], [23.0365, 72.5463] ] },
-  { coords: [ [23.0242, 72.5720], [23.0195, 72.5720], [23.0140, 72.5720], [23.0140, 72.5680], [23.0140, 72.5640] ] },
-  { coords: [ [23.0380, 72.5580], [23.0380, 72.5540], [23.0330, 72.5540], [23.0305, 72.5540] ] },
+  { 
+    coords: [
+      [19.0798, 72.8988], [19.0770, 72.8990], 
+      [19.0750, 72.8992], [19.0730, 72.8995]
+    ] 
+  }
 ];
 
-const CURRENT_JOURNEY = {
-  title: 'Paldi to SG Highway Safety Preview',
-  start: 'Paldi Market',
-  end: 'SG Highway Service Road',
-  route: SAFE_PATHS[0].coords,
-  segments: [
-    {
-      street: 'Ashram Road',
-      locality: 'Paldi',
-      characteristics: 'busy commercial stretch with shopping and light traffic',
-    },
-    {
-      street: 'Navrangpura Road',
-      locality: 'Navrangpura',
-      characteristics: 'wider boulevard with moderate traffic and better lighting',
-    },
-    {
-      street: 'SG Highway Service Road',
-      locality: 'Thaltej',
-      characteristics: 'quieter outer stretch with pockets of dim street lighting',
-    },
-  ],
-};
-
-const MOCK_STATS = { safeScore: 82, nearbyUnits: 3, etaMinutes: 7 };
-
-function ScoreRing({ score }) {
-  return (
-    <View style={styles.ringOuter}>
-      <View style={styles.ringInner}>
-        <Text style={styles.scoreNum}>{score}</Text>
-        <Text style={styles.scoreLabel}>SAFE</Text>
-      </View>
+// Universal SVG Legend Row (Works on Web & Mobile)
+const LegendRow = ({ icon, label, sub }) => (
+  <View style={styles.legendItem}>
+    {Platform.OS === 'web' ? (
+      <div 
+        style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+        dangerouslySetInnerHTML={{ __html: icon }} 
+      />
+    ) : (
+      <View style={styles.legendIconPlaceholder} />
+    )}
+    <View style={{ marginLeft: 8 }}>
+      <Text style={styles.legendLabel}>{label}</Text>
+      {sub && <Text style={styles.legendSubLabel}>{sub}</Text>}
     </View>
-  );
-}
+  </View>
+);
 
-function StatTile({ icon, value, label, accent }) {
-  return (
-    <View style={[styles.statTile, accent && styles.statTileAccent]}>
-      <Text style={styles.statIcon}>{icon}</Text>
-      <Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
+function ScoreRing({ score }) { return (<View style={styles.ringOuter}><View style={styles.ringInner}><Text style={styles.scoreNum}>{score}</Text><Text style={styles.scoreLabel}>SAFE</Text></View></View>); }
+function StatTile({ icon, value, label, accent }) { return (<View style={[styles.statTile, accent && styles.statTileAccent]}><Text style={styles.statIcon}>{icon}</Text><Text style={[styles.statValue, accent && { color: C.teal }]}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>); }
+function LayerToggle({ label, icon, active, color, onPress }) { const dotColor = color ?? C.purple; return (<TouchableOpacity style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]} onPress={onPress} activeOpacity={0.75}><Text style={styles.layerIcon}>{icon}</Text><Text style={[styles.layerLabel, active && { color: dotColor }]}>{label}</Text><View style={[styles.pill, active && { backgroundColor: dotColor }]}><View style={[styles.pillKnob, active && styles.pillKnobOn]} /></View></TouchableOpacity>); }
 
-function LayerToggle({ label, icon, active, color, onPress }) {
-  const dotColor = color ?? C.purple;
-  return (
-    <TouchableOpacity
-      style={[styles.layerRow, active && { borderColor: dotColor, backgroundColor: `${dotColor}18` }]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      <Text style={styles.layerIcon}>{icon}</Text>
-      <Text style={[styles.layerLabel, active && { color: dotColor }]}>{label}</Text>
-      <View style={[styles.pill, active && { backgroundColor: dotColor }]}>
-        <View style={[styles.pillKnob, active && styles.pillKnobOn]} />
-      </View>
-    </TouchableOpacity>
-  );
-}
+const SIDEBAR_W = 240; // Slightly wider for better text fit
 
 const MapScreen = () => {
-  const [threats,          setThreats]          = useState([]);
-  const [safeZones,        setSafeZones]        = useState([]);
-  const [loading,          setLoading]          = useState(true);
-  const [journeyLoading,   setJourneyLoading]   = useState(false);
-  const [journeySummary,   setJourneySummary]   = useState(null);
-  const [showPaths,        setShowPaths]        = useState(true);
-  const [showThreats,      setShowThreats]      = useState(true);
-  const [showSafeZones,    setShowSafeZones]    = useState(true);
-  const [sidebarOpen,      setSidebarOpen]      = useState(true);
-
-  const sidebarAnim = useRef(new Animated.Value(1)).current;
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+  
+  const [threats, setThreats] = useState([]);
+  const [safeZones, setSafeZones] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [showPaths, setShowPaths] = useState(true);
+  const [showThreats, setShowThreats] = useState(true);
+  const [showSafeZones, setShowSafeZones] = useState(true);
+  
+  // Start sidebar closed on mobile, open on web
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const sidebarAnim = useRef(new Animated.Value(!isMobile ? 1 : 0)).current;
+  
   const { sosState } = useSOS();
-  const isSOSActive  = sosState !== SOS_STATE.IDLE;
+  const isSOSActive = sosState !== SOS_STATE.IDLE;
+
+  const [userLocation, setUserLocation] = useState({ lat: 19.0730, lng: 72.8995 }); 
+  const [mapCenter, setMapCenter] = useState({ lat: 19.0730, lng: 72.8995 });
+  const [userLocName, setUserLocName] = useState('Mumbai, MH');
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showLegend, setShowLegend] = useState(false); 
+  const debounceTimeout = useRef(null);
 
   const toggleSidebar = useCallback(() => {
     const next = sidebarOpen ? 0 : 1;
     Animated.spring(sidebarAnim, { toValue: next, tension: 80, friction: 12, useNativeDriver: true }).start();
-    setSidebarOpen((p) => !p);
+    setSidebarOpen(p => !p);
   }, [sidebarOpen]);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const overlay = await getMapOverlay();
-      setThreats(overlay.threats);
-      setSafeZones(overlay.safeZones);
-    } catch (err) {
-      console.error('[MapScreen] loadData error:', err);
-    } finally {
-      setLoading(false);
-    }
+      setThreats(overlay.threats || []);
+      setSafeZones(overlay.safeZones || []);
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    loadData();
-    loadJourneySummary();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  const loadJourneySummary = async () => {
-    setJourneyLoading(true);
+  const handleLocateMe = async () => {
     try {
-      const summary = await summarizeJourney(CURRENT_JOURNEY);
-      setJourneySummary(summary);
-    } catch (error) {
-      console.error('Failed to load journey summary:', error);
-    } finally {
-      setJourneyLoading(false);
-    }
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const lat = location.coords.latitude;
+      const lng = location.coords.longitude;
+      
+      setUserLocation({ lat, lng });
+      setMapCenter({ lat, lng });
+
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+        const data = await res.json();
+        if (data && data.address) {
+          const city = data.address.city || data.address.town || data.address.suburb || 'Mumbai';
+          setUserLocName(`${city}, MH`);
+        }
+      } catch (err) { setUserLocName('Mumbai, MH'); }
+    } catch (error) { console.error(error); }
+  };
+
+  const handleSearchInputChange = (text) => {
+    setSearchQuery(text);
+    if (text.length < 3) { setSuggestions([]); setShowSuggestions(false); return; }
+    if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+    debounceTimeout.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}&limit=5&addressdetails=1`);
+        const data = await res.json();
+        setSuggestions(data || []);
+        setShowSuggestions(true);
+      } catch (err) { console.error(err); } finally { setIsSearching(false); }
+    }, 500);
+  };
+
+  const handleSelectSuggestion = (item) => {
+    Keyboard.dismiss();
+    setShowSuggestions(false);
+    const name = item.display_name.split(',')[0];
+    setSearchQuery(name); 
+    setMapCenter({ lat: parseFloat(item.lat), lng: parseFloat(item.lon) });
+    setUserLocName(`${name}, MH`);
   };
 
   if (loading) {
@@ -182,170 +162,189 @@ const MapScreen = () => {
     );
   }
 
-  const panelTranslate = sidebarAnim.interpolate({
-    inputRange: [0, 1], outputRange: [-220, 0],
-  });
-
-  // ─── NEW INJECTION LOGIC ──────────────────────────────────────────────
-  // We generate the raw SVG strings here and pass them down as text.
+  // Animation interpolate for sliding sidebar
+  const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-SIDEBAR_W, 0] });
   
-  const mapSafeZones = showSafeZones ? safeZones.map(zone => ({
-    ...zone,
-    svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe)
-  })) : [];
+  // Animation for Top Bar to slide out of the way of the sidebar
+  const topBarTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [0, isMobile ? 0 : SIDEBAR_W] });
 
-  const mapThreats = showThreats ? threats.map(threat => ({
-    ...threat,
-    svgHtml: THREAT_ICON(ICON_COLORS.threat)
-  })) : [];
-  // ──────────────────────────────────────────────────────────────────────
+  const isNearby = (lat, lng) => {
+    const threshold = 0.3; 
+    return Math.abs(lat - mapCenter.lat) < threshold && Math.abs(lng - mapCenter.lng) < threshold;
+  };
+
+  const activeSafeZones = safeZones.filter(z => isNearby(z.lat || z.latitude, z.lng || z.longitude));
+  const activeThreats = threats.filter(t => isNearby(t.lat || t.latitude, t.lng || t.longitude));
+
+  const mapSafeZones = showSafeZones ? activeSafeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
+  let mapThreats = showThreats ? activeThreats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
+  if (userLocation) mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
 
   return (
     <View style={styles.root}>
-
       <LeafletMap
-        center={{ lat: AHMEDABAD.latitude, lng: AHMEDABAD.longitude }}
-        zoom={13}
+        center={mapCenter}
+        zoom={15}
         threats={mapThreats}
         safeZones={mapSafeZones}
-        safePaths={showPaths ? SAFE_PATHS : []}
+        safePaths={showPaths ? SAFE_PATHS : []} 
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
-        pathColor={ICON_COLORS.path}
-        safeZoneColor={ICON_COLORS.safe}
-        threatColor={ICON_COLORS.threat}
-        pathWeight={3}
+        pathColor={C.purple}
       />
 
-      {journeySummary && (
-        <JourneySummaryPopup
-          summary={journeySummary}
-          loading={journeyLoading}
-          onRefresh={loadJourneySummary}
-        />
-      )}
-
-      {/* ── Top legend bar ── */}
       {!isSOSActive && (
-        <View style={styles.legend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: C.teal }]} />
-            <Text style={styles.legendLabel}>Safe Zones ({safeZones.length})</Text>
+        <Animated.View style={[styles.topBarContainer, { transform: [{ translateX: topBarTranslate }] }]}>
+          <View style={styles.searchWrapper}>
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search location..."
+                placeholderTextColor={C.textMuted}
+                value={searchQuery}
+                onChangeText={handleSearchInputChange} 
+              />
+              <View style={styles.searchButton}>
+                {isSearching ? <ActivityIndicator size="small" color={C.purpleBright} /> : <Text>🔍</Text>}
+              </View>
+            </View>
+            {showSuggestions && (
+              <View style={styles.suggestionsDropdown}>
+                {suggestions.map((item, index) => (
+                  <TouchableOpacity key={index} style={styles.suggestionItem} onPress={() => handleSelectSuggestion(item)}>
+                    <Text style={styles.suggestionTitle} numberOfLines={1}>{item.display_name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: C.threat }]} />
-            <Text style={styles.legendLabel}>Threats ({threats.length})</Text>
+
+          <View style={styles.legendWrapper}>
+            <TouchableOpacity style={styles.legendTrigger} onPress={() => setShowLegend(!showLegend)}>
+              <Text style={styles.legendTriggerText}>Legend {showLegend ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {showLegend && (
+              <ScrollView style={styles.legendDropdown} nestedScrollEnabled>
+                <Text style={styles.legendSectionHead}>SAFE LANDMARKS</Text>
+                <View style={styles.legendGrid}>
+                  <LegendRow icon={safeZoneIcon('hospital')} label="Hospital / ER" />
+                  <LegendRow icon={safeZoneIcon('police')} label="Police Station" />
+                  <LegendRow icon={safeZoneIcon('fire')} label="Fire Brigade" />
+                  <LegendRow icon={safeZoneIcon('pharmacy')} label="24/7 Pharmacy" />
+                  <LegendRow icon={safeZoneIcon('railway')} label="Transport Hub" />
+                  <LegendRow icon={safeZoneIcon('market')} label="Public Market" />
+                </View>
+                <View style={styles.legendDivider} />
+                <Text style={styles.legendSectionHead}>HAZARDS</Text>
+                <LegendRow icon={THREAT_ICON(ICON_COLORS.threat)} label="Community Threat" sub="Unsafe areas" />
+                <View style={styles.legendDivider} />
+                <Text style={styles.legendSectionHead}>NAVIGATION</Text>
+                <View style={styles.legendItem}>
+                   <View style={[styles.legendLine, { backgroundColor: C.purple }]} />
+                   <Text style={[styles.legendLabel, { marginLeft: 8 }]}>AI Safe Path</Text>
+                </View>
+              </ScrollView>
+            )}
           </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: C.purple }]} />
-            <Text style={styles.legendLabel}>Safe Paths</Text>
-          </View>
-        </View>
+        </Animated.View>
       )}
 
-      {/* ── Sidebar ── */}
       {!isSOSActive && (
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: panelTranslate }] }]}>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sidebarContent}>
-            <View style={styles.locRow}>
+          <ScrollView contentContainerStyle={styles.sidebarContent}>
+            <TouchableOpacity style={styles.locRow} onPress={handleLocateMe}>
               <View style={styles.locDot} />
-              <View>
-                <Text style={styles.locLabel}>MY LOCATION</Text>
-                <Text style={styles.locName}>Ahmedabad, GJ</Text>
-              </View>
-            </View>
-
+              <View><Text style={styles.locLabel}>MY LOCATION</Text><Text style={styles.locName}>{userLocName}</Text></View>
+            </TouchableOpacity>
             <View style={styles.divider} />
-
             <View style={styles.scoreRow}>
-              <ScoreRing score={MOCK_STATS.safeScore} />
+              <ScoreRing score={activeSafeZones.length > 0 ? 82 : 0} />
               <View style={styles.statsGrid}>
-                <StatTile icon="⚠️" value={threats.length} label="THREATS" />
-                <StatTile icon="🛡️" value={safeZones.length} label="SAFE" accent />
-                <StatTile icon="🚔" value={MOCK_STATS.nearbyUnits} label="UNITS" />
-                <StatTile icon="⏱️" value={`${MOCK_STATS.etaMinutes}m`} label="ETA" />
+                <StatTile icon="⚠️" value={activeThreats.length} label="THREATS" />
+                <StatTile icon="🛡️" value={activeSafeZones.length} label="SAFE" accent />
               </View>
             </View>
-
             <View style={styles.divider} />
-
             <Text style={styles.sectionHead}>MAP LAYERS</Text>
-            <LayerToggle label="Safe Paths" icon="🛤️" active={showPaths} color={C.purple} onPress={() => setShowPaths(p => !p)} />
-            <LayerToggle label="Threat Zones" icon="🔴" active={showThreats} color={C.threat} onPress={() => setShowThreats(p => !p)} />
-            <LayerToggle label="Safe Zones" icon="🟢" active={showSafeZones} color={C.teal} onPress={() => setShowSafeZones(p => !p)} />
+            <LayerToggle label="Safe Paths" icon="🛤️" active={showPaths} onPress={() => setShowPaths(!showPaths)} />
+            <LayerToggle label="Threat Zones" icon="🔴" active={showThreats} onPress={() => setShowThreats(!showThreats)} />
+            <LayerToggle label="Safe Zones" icon="🟢" active={showSafeZones} onPress={() => setShowSafeZones(!showSafeZones)} />
           </ScrollView>
 
-          <TouchableOpacity style={styles.refreshBtn} onPress={loadData} activeOpacity={0.75}>
-            <Text style={styles.refreshIcon}>🔄</Text>
-            <Text style={styles.refreshLabel}>Refresh Data</Text>
+          {/* ── FIXED MOBILE CHEVRON: Attached directly to the sidebar edge ── */}
+          <TouchableOpacity style={styles.chevronWrap} onPress={toggleSidebar}>
+            <Text style={styles.chevron}>{sidebarOpen ? '‹' : '›'}</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
 
-      {/* ── Sidebar chevron toggle ── */}
-      {!isSOSActive && (
-        <TouchableOpacity style={[styles.chevronWrap, sidebarOpen && { left: 220 }]} onPress={toggleSidebar}>
-          <Text style={styles.chevron}>{sidebarOpen ? '‹' : '›'}</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* ── SOS layer ── */}
-      {isSOSActive ? (
-        <View style={styles.sosOverlay}>
-          <PanicButton />
-        </View>
-      ) : (
-        <View style={styles.sosFloat}>
-          <PanicButton />
-        </View>
-      )}
-
+      {isSOSActive ? <View style={styles.sosOverlay}><PanicButton /></View> : <View style={styles.sosFloat}><PanicButton /></View>}
     </View>
   );
 };
 
-const SIDEBAR_W = 220;
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  loadingWrap: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', gap: 14 },
-  loadingText: { color: C.textSub, fontSize: 13, letterSpacing: 1 },
-  legend: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(14,14,26,0.90)', gap: 16, zIndex: 50, borderBottomWidth: 1, borderBottomColor: C.panelBorder },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendLabel: { color: C.textSub, fontSize: 11 },
-  sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100, ...Platform.select({ ios: {}, android: { elevation: 12 } }) },
-  sidebarContent: { paddingTop: 48, paddingHorizontal: 14, paddingBottom: 8, gap: 14 },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: C.textSub, fontSize: 13, marginTop: 10 },
+  
+  // ── Responsive Top Bar ──
+  topBarContainer: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, left: 20, right: 20, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', zIndex: 50, gap: 10 },
+  searchWrapper: { flex: 1, maxWidth: 300, position: 'relative', zIndex: 999 },
+  searchContainer: { height: 42, flexDirection: 'row', backgroundColor: C.panel, borderRadius: 8, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 10, elevation: 5 },
+  searchInput: { flex: 1, color: C.text, paddingHorizontal: 15, fontSize: 14, outlineStyle: 'none' },
+  searchButton: { paddingHorizontal: 12, justifyContent: 'center' },
+  suggestionsDropdown: { position: 'absolute', top: 48, left: 0, right: 0, backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+  suggestionItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  suggestionTitle: { color: C.text, fontSize: 13 },
+  
+  // ── Responsive Legend ──
+  legendWrapper: { position: 'relative', zIndex: 999 },
+  legendTrigger: { height: 42, flexDirection: 'row', alignItems: 'center', backgroundColor: C.panel, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 10, elevation: 5 },
+  legendTriggerText: { color: C.text, fontSize: 13, fontWeight: '700' },
+  legendDropdown: { position: 'absolute', top: 48, right: 0, backgroundColor: C.surface, padding: 16, borderRadius: 8, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 15, elevation: 10, width: 220, maxHeight: 400 },
+  legendSectionHead: { color: C.purpleBright, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 8 },
+  legendGrid: { gap: 12 },
+  legendItem: { flexDirection: 'row', alignItems: 'center' },
+  legendLabel: { color: C.text, fontSize: 12, fontWeight: '600' },
+  legendSubLabel: { color: C.textMuted, fontSize: 10 },
+  legendDivider: { height: 1, backgroundColor: C.border, marginVertical: 10 },
+  legendLine: { width: 20, height: 3, borderRadius: 2 },
+
+  // ── Responsive Sidebar ──
+  sidebar: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SIDEBAR_W, backgroundColor: C.panel, borderRightWidth: 1, borderRightColor: C.panelBorder, zIndex: 100, shadowColor: '#000', shadowOpacity: 0.8, shadowRadius: 20, elevation: 15 },
+  sidebarContent: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 16, gap: 16 },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  locDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: C.purple, shadowColor: C.purple, shadowRadius: 6, shadowOpacity: 0.9 },
-  locLabel: { color: C.textMuted, fontSize: 9, letterSpacing: 2 },
-  locName: { color: C.text, fontSize: 13, fontWeight: '700', marginTop: 2 },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  ringOuter: { width: 62, height: 62, borderRadius: 31, borderWidth: 4, borderColor: C.teal, justifyContent: 'center', alignItems: 'center', shadowColor: C.teal, shadowRadius: 8, shadowOpacity: 0.5 },
+  locDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: C.purple },
+  locLabel: { color: C.textMuted, fontSize: 9 },
+  locName: { color: C.text, fontSize: 13, fontWeight: '700' },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  ringOuter: { width: 62, height: 62, borderRadius: 31, borderWidth: 4, borderColor: C.teal, justifyContent: 'center', alignItems: 'center' },
   ringInner: { alignItems: 'center' },
   scoreNum: { color: C.text, fontSize: 18, fontWeight: '800' },
-  scoreLabel:{ color: C.textMuted, fontSize: 7, letterSpacing: 2 },
-  statsGrid: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  statTile: { width: '47%', backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.border, padding: 7, alignItems: 'center', gap: 2 },
-  statTileAccent: { borderColor: C.teal, backgroundColor: C.tealDim },
+  scoreLabel:{ color: C.textMuted, fontSize: 7 },
+  statsGrid: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  statTile: { width: '47%', backgroundColor: C.surface, borderRadius: 8, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
+  statTileAccent: { borderColor: C.tealDim, backgroundColor: 'rgba(6,214,160,0.05)' },
   statIcon: { fontSize: 13 },
   statValue: { color: C.text, fontSize: 14, fontWeight: '800' },
-  statLabel: { color: C.textMuted, fontSize: 8, letterSpacing: 1 },
+  statLabel: { color: C.textMuted, fontSize: 8 },
   divider: { height: 1, backgroundColor: C.border },
-  sectionHead: { color: C.textMuted, fontSize: 9, letterSpacing: 2 },
-  layerRow: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: C.surface, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingVertical: 9, paddingHorizontal: 10 },
-  layerIcon: { fontSize: 13 },
-  layerLabel: { flex: 1, color: C.textSub, fontSize: 11, fontWeight: '600' },
-  pill: { width: 30, height: 17, borderRadius: 9, backgroundColor: C.panelBorder, padding: 2, flexDirection: 'row', alignItems: 'center' },
-  pillKnob: { width: 13, height: 13, borderRadius: 7, backgroundColor: C.textMuted },
+  sectionHead: { color: C.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  layerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.surface, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border },
+  layerIcon: { fontSize: 14 },
+  layerLabel: { flex: 1, color: C.textSub, fontSize: 12, fontWeight: '600' },
+  pill: { width: 34, height: 20, borderRadius: 10, backgroundColor: C.panelBorder, padding: 2 },
+  pillKnob: { width: 16, height: 16, borderRadius: 8, backgroundColor: C.textMuted },
   pillKnobOn: { backgroundColor: '#fff', marginLeft: 'auto' },
-  refreshBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, margin: 14, paddingVertical: 10, backgroundColor: C.surface, borderRadius: 10, borderWidth: 1, borderColor: C.border },
-  refreshIcon: { fontSize: 13 },
-  refreshLabel: { color: C.textSub, fontSize: 12, fontWeight: '600' },
-  chevronWrap: { position: 'absolute', top: '50%', left: SIDEBAR_W, marginTop: -24, width: 22, height: 48, backgroundColor: C.panel, borderTopRightRadius: 8, borderBottomRightRadius: 8, borderWidth: 1, borderLeftWidth: 0, borderColor: C.panelBorder, justifyContent: 'center', alignItems: 'center', zIndex: 110 },
-  chevron: { color: C.purpleBright, fontSize: 16 },
-  sosFloat: { position: 'absolute', bottom: 0, right: 0, zIndex: 999, transform: [{ scale: 0.75 }] },
-  sosOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,8,16,0.97)', zIndex: 9999, justifyContent: 'center', alignItems: 'center' },
+  
+  // ── Attached Chevron Fix ──
+  chevronWrap: { position: 'absolute', top: '50%', right: -24, marginTop: -24, width: 24, height: 48, backgroundColor: C.panel, borderTopRightRadius: 8, borderBottomRightRadius: 8, borderWidth: 1, borderLeftWidth: 0, borderColor: C.panelBorder, justifyContent: 'center', alignItems: 'center' },
+  chevron: { color: C.purpleBright, fontSize: 18, fontWeight: 'bold' },
+  
+  sosFloat: { position: 'absolute', bottom: 10, right: 10, transform: [{ scale: 0.85 }], zIndex: 99 },
+  sosOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(8,8,16,0.97)', justifyContent: 'center', alignItems: 'center', zIndex: 9999 },
 });
 
 export default MapScreen;
