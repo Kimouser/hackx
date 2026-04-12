@@ -5,8 +5,8 @@
  * ============================================================
  *
  *  Hardware:   ESP32 DevKit V1 (or any ESP32 with BLE)
- *  Function:   Wearable SOS bracelet that sends an "SOS" signal
- *              over Bluetooth Low Energy to the Guardian app.
+ *  Function:   Wearable SOS bracelet that creates a WiFi Access Point
+ *              and serves HTTP endpoints for the Guardian app to poll SOS status.
  *
  *  WIRING:
  *    GPIO 4  → Tactile push button → GND  (SOS trigger)
@@ -19,14 +19,14 @@
  *    3.3V    → OLED VCC
  *    GND     → OLED GND
  *
- *  BLE PROFILE:
- *    Device Name:       "Guardian-Bracelet"
- *    Service UUID:      "12345678-1234-5678-1234-56789abcdef0"
- *    Characteristic:    "abcdef01-1234-5678-1234-56789abcdef0"
- *      → Notify: sends "SOS" when button pressed
- *      → Write:  receives "ACK" from app to confirm receipt
- *    Battery Char:      "00002a19-0000-1000-8000-00805f9b34fb" (standard)
- *      → Read/Notify: battery level 0-100
+ *  WIFI ACCESS POINT:
+ *    SSID:         "Guardian-Bracelet"
+ *    Password:     "12345678"
+ *    IP:           192.168.4.1
+ *    Endpoints:
+ *      GET /         - Status page
+ *      GET /status   - JSON: {"sos":true/false,"battery":85}
+ *      GET /sos      - Trigger SOS manually (for testing)
  *
  *  BUTTON BEHAVIOR:
  *    Single press (>50ms):    Send "SOS" once
@@ -34,23 +34,20 @@
  *    Double tap (<400ms gap): Send "SOS_CANCEL" (false alarm cancel)
  *
  *  LED PATTERNS:
- *    Green solid:       BLE connected to phone
- *    Green blink 1Hz:   Advertising (waiting for connection)
+ *    Green solid:       WiFi AP active
  *    Red solid:         SOS active
  *    Red fast blink:    SOS escalated
  *    All off:           Deep sleep (low power)
  *
  *  JUDGE NOTE:
- *    Every BLE transmission logs to Serial at 115200 baud:
- *    "HARDWARE_SIGNAL: SOS Received via BLE at <timestamp>"
+ *    SOS signals logged to Serial at 115200 baud:
+ *    "HARDWARE_SIGNAL: SOS Received at uptime <seconds>"
  *
  * ============================================================
  */
 
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <WiFi.h>
+#include <WebServer.h>
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
@@ -71,14 +68,12 @@
 #define SCREEN_HEIGHT 64
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
-// ════════════════════════════════════════════════════════════════
-// BLE UUIDs (must match HardwareService.js in the app)
-// ════════════════════════════════════════════════════════════════
 
-#define SERVICE_UUID           "12345678-1234-5678-1234-56789abcdef0"
-#define CHARACTERISTIC_UUID    "abcdef01-1234-5678-1234-56789abcdef0"
-#define BATTERY_CHAR_UUID      "00002a19-0000-1000-8000-00805f9b34fb"
-#define BATTERY_SERVICE_UUID   "0000180f-0000-1000-8000-00805f9b34fb"
+// WiFi credentials
+const char* ssid = "Guardian-Bracelet";
+const char* password = "12345678";
+
+WebServer server(80);
 
 // ════════════════════════════════════════════════════════════════
 // TIMING CONSTANTS
@@ -95,13 +90,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 // GLOBAL STATE
 // ════════════════════════════════════════════════════════════════
 
-BLEServer*         pServer          = NULL;
-BLECharacteristic* pSOSCharacteristic = NULL;
-BLECharacteristic* pBatteryChar     = NULL;
-
-bool deviceConnected    = false;
-bool oldDeviceConnected = false;
-bool sosActive          = false;
+bool sosActive = false;
+bool sosTriggered = false;  // Flag for app to poll
 
 // Button state machine
 volatile bool     buttonPressed     = false;
@@ -128,72 +118,35 @@ void hapticPulse(int count);
 void updateOLED();
 
 // ════════════════════════════════════════════════════════════════
-// BLE CALLBACKS
+// WIFI SERVER HANDLERS
 // ════════════════════════════════════════════════════════════════
 
-class GuardianServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer* pServer) {
-    deviceConnected = true;
-    Serial.println("[BLE] Phone connected to Guardian-Bracelet");
+void handleRoot() {
+  String html = "<html><body><h1>Guardian Bracelet</h1><p>Status: ";
+  html += sosActive ? "SOS ACTIVE" : "IDLE";
+  html += "</p><p>Battery: " + String(batteryLevel) + "%</p></body></html>";
+  server.send(200, "text/html", html);
+}
 
-    // Solid green LED
-    digitalWrite(LED_GREEN_PIN, HIGH);
-
-    // Haptic confirmation: two short pulses
-    hapticPulse(2);
-
-    // Update OLED
-    updateOLED();
+void handleStatus() {
+  String json = "{\"sos\":";
+  json += sosTriggered ? "true" : "false";
+  json += ",\"battery\":" + String(batteryLevel) + "}";
+  server.send(200, "application/json", json);
+  if (sosTriggered) {
+    sosTriggered = false;  // Reset after app reads
   }
+}
 
-  void onDisconnect(BLEServer* pServer) {
-    deviceConnected = false;
-    Serial.println("[BLE] Phone disconnected");
-
-    digitalWrite(LED_GREEN_PIN, LOW);
-
-    // Restart advertising so phone can reconnect
-    delay(500);
-    pServer->startAdvertising();
-    Serial.println("[BLE] Advertising restarted");
-
-    // Update OLED
-    updateOLED();
-  }
-};
-
-/**
- * Handle writes FROM the app (e.g., "ACK", "CANCEL", "PING")
- */
-class SOSCharCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pCharacteristic) {
-    String value = pCharacteristic->getValue();
-
-    if (value.length() > 0) {
-      Serial.print("[BLE] Received from app: ");
-      Serial.println(value.c_str());
-
-      if (value == "ACK") {
-        // App acknowledged the SOS
-        Serial.println("[BLE] App confirmed SOS receipt");
-        hapticPulse(1);
-        updateOLED();
-      }
-      else if (value == "CANCEL") {
-        // App cancelled the SOS (user tapped "I'm Safe")
-        sosActive = false;
-        digitalWrite(LED_RED_PIN, LOW);
-        Serial.println("[BLE] SOS cancelled by app");
-        hapticPulse(3);  // Three quick pulses = cancelled
-        updateOLED();
-      }
-      else if (value == "PING") {
-        // Heartbeat from app
-        Serial.println("[BLE] Heartbeat PING received");
-      }
-    }
-  }
-};
+void handleSOS() {
+  sosActive = true;
+  sosTriggered = true;
+  digitalWrite(LED_RED_PIN, HIGH);
+  hapticPulse(2);
+  updateOLED();
+  server.send(200, "text/plain", "SOS Triggered");
+  Serial.println("[WiFi] SOS triggered via HTTP");
+}
 
 // ════════════════════════════════════════════════════════════════
 // HAPTIC FEEDBACK
@@ -222,59 +175,29 @@ void updateOLED() {
     display.println("SOS ACTIVE!");
     display.setTextSize(1);
     display.println("Help on the way...");
-  } else if (deviceConnected) {
-    display.println("CONNECTED");
-    display.setTextSize(1);
-    display.printf("Battery: %d%%\n", batteryLevel);
-    display.printf("Uptime: %lus\n", (millis() - bootTime) / 1000);
   } else {
     display.println("GUARDIAN");
     display.setTextSize(1);
-    display.println("Advertising...");
+    display.println("WiFi AP Active");
+    display.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
     display.printf("Battery: %d%%\n", batteryLevel);
   }
 
   display.display();
 }
 
-// ════════════════════════════════════════════════════════════════
-// SOS TRANSMISSION
-// ════════════════════════════════════════════════════════════════
-
 /**
- * Send an SOS signal over BLE.
+ * Trigger SOS signal.
  * @param type  "SOS", "SOS_ESCALATED", or "SOS_CANCEL"
  */
 void sendSOS(const char* type) {
-  if (!deviceConnected) {
-    Serial.println("[SOS] No phone connected — signal not sent!");
-    // Flash red rapidly to indicate no connection
-    for (int i = 0; i < 6; i++) {
-      digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
-      delay(100);
-    }
-    digitalWrite(LED_RED_PIN, LOW);
-    return;
-  }
-
-  // ── Build the BLE payload ──
-  // Format: "SOS|<millis>|<battery>"
-  // The app parses this to extract signal type and metadata
-  char payload[64];
-  snprintf(payload, sizeof(payload), "%s|%lu|%d", type, millis() - bootTime, batteryLevel);
-
-  pSOSCharacteristic->setValue(payload);
-  pSOSCharacteristic->notify();
-
   // ── Judge-friendly serial log ──
   Serial.println("════════════════════════════════════════");
   Serial.print("HARDWARE_SIGNAL: ");
   Serial.print(type);
-  Serial.print(" Received via BLE at uptime ");
+  Serial.print(" Received at uptime ");
   Serial.print((millis() - bootTime) / 1000);
   Serial.println(" seconds");
-  Serial.print("  Payload: ");
-  Serial.println(payload);
   Serial.print("  Battery: ");
   Serial.print(batteryLevel);
   Serial.println("%");
@@ -283,17 +206,20 @@ void sendSOS(const char* type) {
   // ── Visual + haptic feedback ──
   if (strcmp(type, "SOS") == 0) {
     sosActive = true;
+    sosTriggered = true;
     digitalWrite(LED_RED_PIN, HIGH);
     hapticPulse(2);  // Two pulses = SOS sent
     updateOLED();
   }
   else if (strcmp(type, "SOS_ESCALATED") == 0) {
     sosActive = true;
+    sosTriggered = true;
     hapticPulse(5);  // Five rapid pulses = escalated
     updateOLED();
   }
   else if (strcmp(type, "SOS_CANCEL") == 0) {
     sosActive = false;
+    sosTriggered = false;
     digitalWrite(LED_RED_PIN, LOW);
     hapticPulse(1);
     updateOLED();
@@ -386,17 +312,8 @@ void handleButton() {
 void updateLEDs() {
   unsigned long now = millis();
 
-  // ── Green LED: connection status ──
-  if (deviceConnected) {
-    digitalWrite(LED_GREEN_PIN, HIGH);  // Solid = connected
-  } else {
-    // Blink at 1Hz when advertising
-    if (now - lastBlinkTime >= 1000) {
-      lastBlinkTime = now;
-      blinkState = !blinkState;
-      digitalWrite(LED_GREEN_PIN, blinkState);
-    }
-  }
+  // ── Green LED: WiFi status ──
+  digitalWrite(LED_GREEN_PIN, HIGH);  // Solid = WiFi AP active
 
   // ── Red LED: SOS status ──
   if (sosActive) {
@@ -407,8 +324,8 @@ void updateLEDs() {
     }
   }
 
-  // ── Built-in LED mirrors connection state ──
-  digitalWrite(LED_BUILTIN_PIN, deviceConnected ? HIGH : LOW);
+  // ── Built-in LED mirrors SOS state ──
+  digitalWrite(LED_BUILTIN_PIN, sosActive ? HIGH : LOW);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -471,57 +388,19 @@ void setup() {
   digitalWrite(LED_GREEN_PIN, LOW);
   digitalWrite(VIBRATION_PIN, LOW);
 
-  // ── Initialize BLE ──
-  Serial.println("[BLE] Initializing...");
-  BLEDevice::init("Guardian-Bracelet");
+  // ── Initialize WiFi ──
+  Serial.println("[WiFi] Starting Access Point...");
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("[WiFi] AP IP address: ");
+  Serial.println(IP);
 
-  // Create BLE Server
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new GuardianServerCallbacks());
-
-  // ── SOS Service ──
-  BLEService* pSOSService = pServer->createService(SERVICE_UUID);
-
-  // SOS Characteristic (Notify + Write)
-  pSOSCharacteristic = pSOSService->createCharacteristic(
-    CHARACTERISTIC_UUID,
-    BLECharacteristic::PROPERTY_READ   |
-    BLECharacteristic::PROPERTY_WRITE  |
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
-  pSOSCharacteristic->addDescriptor(new BLE2902());  // Enable notifications
-  pSOSCharacteristic->setCallbacks(new SOSCharCallbacks());
-  pSOSCharacteristic->setValue("IDLE");
-
-  pSOSService->start();
-
-  // ── Battery Service (Standard BLE profile) ──
-  BLEService* pBatteryService = pServer->createService(BATTERY_SERVICE_UUID);
-
-  pBatteryChar = pBatteryService->createCharacteristic(
-    BATTERY_CHAR_UUID,
-    BLECharacteristic::PROPERTY_READ |
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
-  pBatteryChar->addDescriptor(new BLE2902());
-  pBatteryChar->setValue(&batteryLevel, 1);
-
-  pBatteryService->start();
-
-  // ── Start Advertising ──
-  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->addServiceUUID(BATTERY_SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);  // Helps with iPhone connections
-  pAdvertising->setMinPreferred(0x12);
-  BLEDevice::startAdvertising();
-
-  Serial.println("[BLE] Guardian-Bracelet is advertising");
-  Serial.println("[BLE] Service UUID:        " SERVICE_UUID);
-  Serial.println("[BLE] Characteristic UUID:  " CHARACTERISTIC_UUID);
-  Serial.println("[BLE] Waiting for phone connection...");
-  Serial.println();
+  // Setup web server routes
+  server.on("/", handleRoot);
+  server.on("/status", handleStatus);
+  server.on("/sos", handleSOS);
+  server.begin();
+  Serial.println("[WiFi] HTTP server started");
 
   // Startup haptic + LED confirmation
   hapticPulse(1);
@@ -541,22 +420,14 @@ void loop() {
   // 2. Update LED indicators
   updateLEDs();
 
-  // 3. Update OLED display periodically
+  // 3. Handle HTTP server clients
+  server.handleClient();
+
+  // 4. Update OLED display periodically
   static unsigned long lastOLEDUpdate = 0;
   if (millis() - lastOLEDUpdate > 2000) {  // Update every 2 seconds
     updateOLED();
     lastOLEDUpdate = millis();
-  }
-
-  // 4. Handle BLE reconnection
-  if (!deviceConnected && oldDeviceConnected) {
-    delay(500);
-    pServer->startAdvertising();
-    Serial.println("[BLE] Re-advertising after disconnect");
-    oldDeviceConnected = deviceConnected;
-  }
-  if (deviceConnected && !oldDeviceConnected) {
-    oldDeviceConnected = deviceConnected;
   }
 
   // Small delay to prevent watchdog issues
