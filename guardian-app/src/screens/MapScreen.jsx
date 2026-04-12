@@ -50,9 +50,8 @@ const C = {
   border:      '#1e1e35',
 };
 
-const TILE_URL = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png';
-const TILE_ATTRIBUTION = '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; OpenMapTiles &copy; OpenStreetMap';
-
+const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTRIBUTION = '&copy; <a href="https://carto.com/">CARTO</a>';
 const SAFE_PATHS = [
   { coords: [ [23.0305, 72.5653], [23.0305, 72.5580], [23.0305, 72.5540], [23.0335, 72.5540], [23.0365, 72.5540], [23.0365, 72.5463] ] },
   { coords: [ [23.0242, 72.5720], [23.0195, 72.5720], [23.0140, 72.5720], [23.0140, 72.5680], [23.0140, 72.5640] ] },
