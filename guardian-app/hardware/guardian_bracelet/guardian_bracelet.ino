@@ -308,13 +308,13 @@ void handleButton() {
   bool currentState = digitalRead(SOS_BUTTON_PIN) == LOW;  // Active LOW (pullup)
   unsigned long now = millis();
 
-  // Debug: print button state occasionally
-  static unsigned long lastDebug = 0;
-  if (now - lastDebug > 1000) {  // Every second
-    Serial.print("[Button] Pin state: ");
-    Serial.println(digitalRead(SOS_BUTTON_PIN));
-    lastDebug = now;
-  }
+  // Debug: print button state occasionally (disabled for stability)
+  // static unsigned long lastDebug = 0;
+  // if (now - lastDebug > 1000) {  // Every second
+  //   Serial.print("[Button] Pin state: ");
+  //   Serial.println(digitalRead(SOS_BUTTON_PIN));
+  //   lastDebug = now;
+  // }
 
   if (currentState && !buttonPressed) {
     // ── BUTTON DOWN ──
@@ -416,19 +416,17 @@ void updateLEDs() {
 // ════════════════════════════════════════════════════════════════
 
 void updateBattery() {
-  if (millis() - lastBatteryTime < BATTERY_INTERVAL_MS) return;
-  lastBatteryTime = millis();
-
-  // Simulate slow battery drain (for demo realism)
-  if (batteryLevel > 10) batteryLevel--;
-
-  if (deviceConnected && pBatteryChar != NULL) {
-    pBatteryChar->setValue(&batteryLevel, 1);
-    pBatteryChar->notify();
-    Serial.print("[Battery] Level: ");
-    Serial.print(batteryLevel);
-    Serial.println("%");
-  }
+  // Disabled for demo stability
+  // if (millis() - lastBatteryTime < BATTERY_INTERVAL_MS) return;
+  // lastBatteryTime = millis();
+  // if (batteryLevel > 10) batteryLevel--;
+  // if (deviceConnected && pBatteryChar != NULL) {
+  //   pBatteryChar->setValue(&batteryLevel, 1);
+  //   pBatteryChar->notify();
+  //   Serial.print("[Battery] Level: ");
+  //   Serial.print(batteryLevel);
+  //   Serial.println("%");
+  // }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -550,10 +548,7 @@ void loop() {
     lastOLEDUpdate = millis();
   }
 
-  // 4. Report battery level periodically
-  updateBattery();
-
-  // 5. Handle BLE reconnection
+  // 4. Handle BLE reconnection
   if (!deviceConnected && oldDeviceConnected) {
     delay(500);
     pServer->startAdvertising();
