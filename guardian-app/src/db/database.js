@@ -5,9 +5,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // 1. Connection Setup
-// Replace these with the actual keys from your Supabase 'API Keys' screenshot
 const supabaseUrl = 'https://bwlmblglaslgasutxyyd.supabase.co';
-const supabaseKey = 'YOUR_ACTUAL_ANON_KEY_STARTING_WITH_eyJ'; // Found in image_16539e.png
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3bG1ibGdsYXNsZ2FzdXR4eXlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MTc4NTQsImV4cCI6MjA5MTQ5Mzg1NH0.g37KcDIM4V2RmZTuRjKW961XgtQCfL1PALb8Yp2hI-M';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -33,8 +32,8 @@ export const getMapOverlay = async () => {
     return {
       threats: (threats || []).map(t => ({
         ...t,
-        latitude: t.lat, // Crawler uses 'lat'
-        longitude: t.lng, // Crawler uses 'lng'
+        latitude: t.lat, // Maps crawler's 'lat' to frontend 'latitude'
+        longitude: t.lng, // Maps crawler's 'lng' to frontend 'longitude'
       })),
       safeZones: (safeZones || []).map(z => ({
         ...z,
@@ -75,10 +74,8 @@ export const getAllReports = async () => {
 
 /** Upvote logic for the Dashboard Poll */
 export const upvoteReport = async (id) => {
-  // 1. Fetch current upvotes
   const { data: current } = await supabase.from('reports').select('upvotes').eq('id', id).single();
   
-  // 2. Increment
   const { data: updated, error } = await supabase
     .from('reports')
     .update({ upvotes: (current?.upvotes || 0) + 1 })
