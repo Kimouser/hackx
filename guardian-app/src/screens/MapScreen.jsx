@@ -15,6 +15,7 @@ import { getMapOverlay } from '../db/database';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
 import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
+
 const C = {
   bg: '#080810', panel: 'rgba(14,14,26,0.95)', panelBorder: '#1e1e35',
   surface: '#13131f', purple: '#7c4dff', purpleBright: '#a07dff',
@@ -150,17 +151,6 @@ const MapScreen = () => {
     setUserLocName(`${name}, MH`);
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator size="large" color={C.purple} />
-        <Text style={styles.loadingText}>Initialising safety grid…</Text>
-      </View>
-    );
-  }
-
-  const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
-
   const isNearby = (lat, lng) => {
     const threshold = 0.3; 
     return Math.abs(lat - mapCenter.lat) < threshold && Math.abs(lng - mapCenter.lng) < threshold;
@@ -172,6 +162,17 @@ const MapScreen = () => {
   const mapSafeZones = showSafeZones ? activeSafeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
   let mapThreats = showThreats ? activeThreats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
   if (userLocation) mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
+
+  if (loading) {
+    return (
+      <View style={styles.loadingWrap}>
+        <ActivityIndicator size="large" color={C.purple} />
+        <Text style={styles.loadingText}>Initialising safety grid…</Text>
+      </View>
+    );
+  }
+
+  const panelTranslate = sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [-220, 0] });
 
   return (
     <View style={styles.root}>
@@ -275,9 +276,6 @@ const MapScreen = () => {
       {isSOSActive ? <View style={styles.sosOverlay}><PanicButton /></View> : <View style={styles.sosFloat}><PanicButton /></View>}
     </View>
   );
-};
-
-const SIDEBAR_W = 220;
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
