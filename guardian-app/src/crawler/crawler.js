@@ -1,105 +1,110 @@
 // ============================================================
-//  Project Guardian — Web Crawler
+//  Project Guardian — Web Crawler  v2  (RSS-First Architecture)
 //  Scrapes Mumbai crime/safety news and pushes to Supabase.
 //
-//  Dependencies:  npm install axios cheerio @supabase/supabase-js dotenv
-//  Usage:         node crawler.js
-//  Env file:      .env  (SUPABASE_URL, SUPABASE_SERVICE_KEY)
+//  WHY RSS?  HTML scrapers break when sites change their markup
+//  or add bot protection. RSS feeds are:
+//    ✅ Deliberately public & stable
+//    ✅ Structured XML — no selector guessing
+//    ✅ Served without Cloudflare / JS-rendering gates
+//
+//  Dependencies:
+//    npm install axios cheerio @supabase/supabase-js dotenv
+//
+//  Usage:   node crawler.js
+//  Env:     .env  →  SUPABASE_URL, SUPABASE_SERVICE_KEY
 // ============================================================
 
 "use strict";
 
 require("dotenv").config();
-const axios = require("axios");
+const axios   = require("axios");
 const cheerio = require("cheerio");
 const { createClient } = require("@supabase/supabase-js");
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 // 1.  SUPABASE CLIENT
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY   // Use the service-role key server-side
+  process.env.SUPABASE_SERVICE_KEY  // service-role key — server-side only
 );
 
-// ─────────────────────────────────────────────
-// 2.  MUMBAI VIEWPORT  (bounding box)
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 2.  MUMBAI BOUNDING BOX
+// ─────────────────────────────────────────────────────────────
 const MUMBAI_BOUNDS = {
-  latMin: 18.90,
-  latMax: 19.30,
-  lngMin: 72.75,
-  lngMax: 73.00,
+  latMin: 18.90, latMax: 19.30,
+  lngMin: 72.75, lngMax: 73.00,
 };
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 // 3.  HEURISTIC GEOCODING TABLE
-//     Add more localities as the project grows.
-// ─────────────────────────────────────────────
-const LOCATION_COORDS = {
-  // === Primary focus area ===
-  vidyavihar:   { lat: 19.0771, lng: 72.9067 },
-  ghatkopar:    { lat: 19.0862, lng: 72.9078 },
-  somaiya:      { lat: 19.0746, lng: 72.9003 },
-
-  // === Nearby areas ===
-  kurla:        { lat: 19.0728, lng: 72.8792 },
-  vikhroli:     { lat: 19.1057, lng: 72.9266 },
-  bhandup:      { lat: 19.1439, lng: 72.9399 },
-  powai:        { lat: 19.1197, lng: 72.9069 },
-  chembur:      { lat: 19.0622, lng: 72.9012 },
-  mulund:       { lat: 19.1763, lng: 72.9561 },
-  thane:        { lat: 19.2183, lng: 72.9781 },
-
-  // === Western suburbs ===
-  andheri:      { lat: 19.1136, lng: 72.8697 },
-  bandra:       { lat: 19.0596, lng: 72.8295 },
-  borivali:     { lat: 19.2307, lng: 72.8567 },
-  malad:        { lat: 19.1874, lng: 72.8482 },
-  kandivali:    { lat: 19.2053, lng: 72.8496 },
-  goregaon:     { lat: 19.1581, lng: 72.8501 },
-  jogeshwari:   { lat: 19.1388, lng: 72.8491 },
-  vile_parle:   { lat: 19.0990, lng: 72.8497 },
-
-  // === South Mumbai ===
-  dadar:        { lat: 19.0176, lng: 72.8432 },
-  dharavi:      { lat: 19.0380, lng: 72.8553 },
-  sion:         { lat: 19.0397, lng: 72.8699 },
-  worli:        { lat: 19.0168, lng: 72.8167 },
-  lower_parel:  { lat: 18.9939, lng: 72.8262 },
-  colaba:       { lat: 18.9067, lng: 72.8147 },
-  fort:         { lat: 18.9345, lng: 72.8351 },
-  churchgate:   { lat: 18.9354, lng: 72.8272 },
-  cst:          { lat: 18.9399, lng: 72.8355 },
-
-  // === Generic terms ===
-  station:      { lat: 19.0771, lng: 72.9067 },   // defaults to Vidyavihar station
-  mumbai:       { lat: 19.0760, lng: 72.8777 },
-};
+//     Ordered by specificity (specific first, catch-alls last).
+// ─────────────────────────────────────────────────────────────
+const LOCATION_COORDS = [
+  // ── Primary focus area ───────────────────────────────────────
+  { term: "vidyavihar",    lat: 19.0771, lng: 72.9067 },
+  { term: "ghatkopar",     lat: 19.0862, lng: 72.9078 },
+  { term: "somaiya",       lat: 19.0746, lng: 72.9003 },
+  // ── Eastern suburbs ──────────────────────────────────────────
+  { term: "kurla",         lat: 19.0728, lng: 72.8792 },
+  { term: "vikhroli",      lat: 19.1057, lng: 72.9266 },
+  { term: "bhandup",       lat: 19.1439, lng: 72.9399 },
+  { term: "powai",         lat: 19.1197, lng: 72.9069 },
+  { term: "chembur",       lat: 19.0622, lng: 72.9012 },
+  { term: "mulund",        lat: 19.1763, lng: 72.9561 },
+  { term: "thane",         lat: 19.2183, lng: 72.9781 },
+  { term: "mankhurd",      lat: 19.0423, lng: 72.9311 },
+  { term: "govandi",       lat: 19.0540, lng: 72.9213 },
+  // ── Western suburbs ──────────────────────────────────────────
+  { term: "andheri",       lat: 19.1136, lng: 72.8697 },
+  { term: "bandra",        lat: 19.0596, lng: 72.8295 },
+  { term: "borivali",      lat: 19.2307, lng: 72.8567 },
+  { term: "malad",         lat: 19.1874, lng: 72.8482 },
+  { term: "kandivali",     lat: 19.2053, lng: 72.8496 },
+  { term: "goregaon",      lat: 19.1581, lng: 72.8501 },
+  { term: "jogeshwari",    lat: 19.1388, lng: 72.8491 },
+  { term: "vile parle",    lat: 19.0990, lng: 72.8497 },
+  { term: "santacruz",     lat: 19.0831, lng: 72.8440 },
+  { term: "versova",       lat: 19.1318, lng: 72.8209 },
+  { term: "khar",          lat: 19.0724, lng: 72.8337 },
+  // ── South Mumbai ─────────────────────────────────────────────
+  { term: "dadar",         lat: 19.0176, lng: 72.8432 },
+  { term: "dharavi",       lat: 19.0380, lng: 72.8553 },
+  { term: "sion",          lat: 19.0397, lng: 72.8699 },
+  { term: "matunga",       lat: 19.0290, lng: 72.8611 },
+  { term: "worli",         lat: 19.0168, lng: 72.8167 },
+  { term: "lower parel",   lat: 18.9939, lng: 72.8262 },
+  { term: "parel",         lat: 19.0009, lng: 72.8420 },
+  { term: "colaba",        lat: 18.9067, lng: 72.8147 },
+  { term: "fort",          lat: 18.9345, lng: 72.8351 },
+  { term: "churchgate",    lat: 18.9354, lng: 72.8272 },
+  { term: "csmt",          lat: 18.9399, lng: 72.8355 },
+  { term: "cst",           lat: 18.9399, lng: 72.8355 },
+  { term: "nariman point", lat: 18.9254, lng: 72.8243 },
+  // ── Catch-alls (keep last) ────────────────────────────────────
+  { term: "navi mumbai",   lat: 19.0368, lng: 73.0158 },
+  { term: "mumbai",        lat: 19.0760, lng: 72.8777 },
+];
 
 /**
- * Returns {lat, lng} for a given news text using keyword matching.
+ * Returns {lat, lng} for a text string using keyword matching.
+ * Adds ±~500 m jitter so markers spread out on the map.
  * Falls back to a random point inside the Mumbai bounding box.
- * @param {string} text - Combined title + description text to search.
+ * @param {string} text
  * @returns {{ lat: number, lng: number }}
  */
 function geocodeFromText(text) {
   const lower = text.toLowerCase();
-
-  // Iterate the lookup table; first match wins
-  for (const [keyword, coords] of Object.entries(LOCATION_COORDS)) {
-    // Replace underscores so "vile_parle" matches "vile parle"
-    const term = keyword.replace(/_/g, " ");
+  for (const { term, lat, lng } of LOCATION_COORDS) {
     if (lower.includes(term)) {
-      // Add tiny random jitter (±~500 m) so markers don't pile up exactly
       return {
-        lat: coords.lat + (Math.random() - 0.5) * 0.009,
-        lng: coords.lng + (Math.random() - 0.5) * 0.009,
+        lat: lat + (Math.random() - 0.5) * 0.009,
+        lng: lng + (Math.random() - 0.5) * 0.009,
       };
     }
   }
-
-  // Fallback — random point within Mumbai viewport
   const { latMin, latMax, lngMin, lngMax } = MUMBAI_BOUNDS;
   return {
     lat: latMin + Math.random() * (latMax - latMin),
@@ -107,296 +112,317 @@ function geocodeFromText(text) {
   };
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 // 4.  CATEGORY CLASSIFIER
-//     Simple keyword → category mapping.
-// ─────────────────────────────────────────────
+//     Priority-ordered: first match wins.
+// ─────────────────────────────────────────────────────────────
 const CATEGORY_RULES = [
-  { keywords: ["eve-teasing", "harassment", "molest", "stalk", "assault", "rape", "grope"], category: "harassment" },
-  { keywords: ["dark", "streetlight", "light out", "no light", "pothole", "broken", "road", "infrastructure"], category: "broken_lights" },
-  { keywords: ["robbery", "theft", "chain snatching", "mugging", "pickpocket", "burglar", "dacoity"], category: "unsafe_area" },
-  { keywords: ["alert", "warning", "flood", "fire", "bomb", "terror", "protest", "riot", "curfew"], category: "safety_alert" },
+  {
+    category: "harassment",
+    keywords: [
+      "eve-teasing", "harassment", "molest", "stalk", "assault", "rape",
+      "grope", "molestation", "outrage", "modesty", "sexual offence",
+      "abduct", "kidnap", "traffick",
+    ],
+  },
+  {
+    category: "broken_lights",
+    keywords: [
+      "streetlight", "street light", "light out", "no light", "unlit",
+      "pothole", "broken road", "footpath", "dark lane", "dark road",
+      "power cut", "blackout", "infrastructure",
+    ],
+  },
+  {
+    category: "safety_alert",
+    keywords: [
+      "alert", "warning", "flood", "cyclone", "fire", "bomb", "blast",
+      "terror", "protest", "riot", "curfew", "landslide", "gas leak",
+      "emergency", "disaster",
+    ],
+  },
+  {
+    // Default catch-all for crime news
+    category: "unsafe_area",
+    keywords: [
+      "robbery", "theft", "chain snatching", "mugging", "pickpocket",
+      "burglar", "dacoity", "loot", "snatch", "steal", "murder",
+      "crime", "arrested", "police", "fir", "accused", "victim", "gang",
+    ],
+  },
 ];
 
 /**
- * Classifies an article into one of the Guardian categories.
- * @param {string} text - Combined title + description.
- * @returns {string} category
+ * @param {string} text - combined title + description
+ * @returns {string} one of the four Guardian categories
  */
 function classifyCategory(text) {
   const lower = text.toLowerCase();
-  for (const rule of CATEGORY_RULES) {
-    if (rule.keywords.some((kw) => lower.includes(kw))) {
-      return rule.category;
-    }
+  for (const { category, keywords } of CATEGORY_RULES) {
+    if (keywords.some((kw) => lower.includes(kw))) return category;
   }
-  // Default — generic unsafe area if it passed safety filters
   return "unsafe_area";
 }
 
-// ─────────────────────────────────────────────
-// 5.  NEWS SOURCE DEFINITIONS
-//     Each source has a custom scrape() function
-//     that returns an array of { title, description }.
-// ─────────────────────────────────────────────
-
-/**
- * Generic helper: fetch a URL with a browser-like User-Agent.
- * @param {string} url
- * @returns {Promise<cheerio.CheerioAPI>}
- */
-async function fetchPage(url) {
-  const { data } = await axios.get(url, {
-    timeout: 15000,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-  });
-  return cheerio.load(data);
-}
-
-// ── 5a. Mid-Day (Mumbai) ──────────────────────
-async function scrapeMidDay() {
-  const articles = [];
-  try {
-    const $ = await fetchPage("https://www.mid-day.com/mumbai/mumbai-crime-news");
-    $("article, .listing-item, .news-card").each((_, el) => {
-      const title = $(el).find("h2, h3, .title").first().text().trim();
-      const description = $(el).find("p, .summary, .excerpt").first().text().trim();
-      if (title) articles.push({ title, description: description || title });
-    });
-  } catch (err) {
-    console.warn("[Mid-Day] Scrape failed:", err.message);
-  }
-  return articles;
-}
-
-// ── 5b. Times of India — Mumbai Crime ────────
-async function scrapeTOI() {
-  const articles = [];
-  try {
-    // TOI's search RSS for Mumbai crime news
-    const $ = await fetchPage(
-      "https://timesofindia.indiatimes.com/city/mumbai/crime"
-    );
-    // TOI article cards generally carry class "col_l_6" or ".top-story"
-    $("li.clearfix, .article-storyCont, .top-story, [data-articlid]").each((_, el) => {
-      const title = $(el).find("a, span.title, .story-title").first().text().trim();
-      const description = $(el).find("p, .synopsis").first().text().trim();
-      if (title) articles.push({ title, description: description || title });
-    });
-  } catch (err) {
-    console.warn("[TOI] Scrape failed:", err.message);
-  }
-  return articles;
-}
-
-// ── 5c. Free Press Journal ───────────────────
-async function scrapeFPJ() {
-  const articles = [];
-  try {
-    const $ = await fetchPage(
-      "https://www.freepressjournal.in/mumbai/crime"
-    );
-    $("article, .post-content-area, .section-listing__item").each((_, el) => {
-      const title = $(el).find("h2, h3, .entry-title, a").first().text().trim();
-      const description = $(el).find("p, .entry-summary").first().text().trim();
-      if (title) articles.push({ title, description: description || title });
-    });
-  } catch (err) {
-    console.warn("[FPJ] Scrape failed:", err.message);
-  }
-  return articles;
-}
-
-// ── 5d. Hindustan Times — Mumbai ─────────────
-async function scrapeHindustanTimes() {
-  const articles = [];
-  try {
-    const $ = await fetchPage(
-      "https://www.hindustantimes.com/cities/mumbai-news/crime"
-    );
-    $(".cartHolder, .storyShortDetail, article").each((_, el) => {
-      const title = $(el).find("h2, h3, .hdg3, a.storyLink").first().text().trim();
-      const description = $(el).find("p, .sortDes").first().text().trim();
-      if (title) articles.push({ title, description: description || title });
-    });
-  } catch (err) {
-    console.warn("[HT] Scrape failed:", err.message);
-  }
-  return articles;
-}
-
-// ── 5e. Mumbai Mirror / Mumbai Live (RSS) ─────
-async function scrapeMumbaiLive() {
-  const articles = [];
-  try {
-    // Mumbai Live exposes an RSS feed — easier to parse reliably
-    const $ = await fetchPage("https://www.mumbailive.com/en/crime");
-    $("article, .news-listing__item, .card").each((_, el) => {
-      const title = $(el).find("h2, h3, .card-title").first().text().trim();
-      const description = $(el).find("p, .card-text").first().text().trim();
-      if (title) articles.push({ title, description: description || title });
-    });
-  } catch (err) {
-    console.warn("[Mumbai Live] Scrape failed:", err.message);
-  }
-  return articles;
-}
-
-// ─────────────────────────────────────────────
-// 6.  SAFETY FILTER
-//     We only want safety/crime-relevant articles.
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 5.  SAFETY-RELEVANCE FILTER
+//     Only safety/crime/infrastructure articles pass through.
+// ─────────────────────────────────────────────────────────────
 const SAFETY_KEYWORDS = [
   "crime", "theft", "robbery", "murder", "rape", "assault", "molestation",
-  "harassment", "kidnap", "acid", "stalking", "snatching", "fraud", "scam",
+  "harassment", "kidnap", "acid", "stalking", "snatching", "fraud",
   "accident", "fire", "flood", "blast", "terror", "alert", "curfew",
-  "protest", "riot", "dark", "street light", "pothole", "unsafe", "police",
-  "arrested", "fir", "case registered", "victim", "dead body", "missing",
+  "riot", "dark", "streetlight", "street light", "pothole", "unsafe",
+  "police", "arrested", "fir", "victim", "missing", "dead", "body found",
+  "dacoity", "chain snatch", "gang", "traffick", "molest", "eve-teas",
+  "outrage", "broken light", "unlit", "loot", "burglar", "emergency",
 ];
 
-/**
- * Returns true if the article text contains at least one safety keyword.
- */
 function isSafetyRelevant(title, description) {
   const combined = `${title} ${description}`.toLowerCase();
   return SAFETY_KEYWORDS.some((kw) => combined.includes(kw));
 }
 
-// ─────────────────────────────────────────────
-// 7.  DEDUPLICATION
-//     Fetch existing titles from Supabase and
-//     return a Set for O(1) lookups.
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 6.  RSS PARSER
+//     Fetches any RSS 2.0 / Atom feed and returns
+//     an array of { title, description }.
+// ─────────────────────────────────────────────────────────────
+
+/** Strip HTML tags and decode common XML entities. */
+function cleanText(raw = "") {
+  return raw
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, (m) =>
+      m.slice(9, -3)              // unwrap CDATA sections
+    )
+    .replace(/<[^>]+>/g, "")     // strip any remaining tags
+    .replace(/&amp;/g,  "&")
+    .replace(/&lt;/g,   "<")
+    .replace(/&gt;/g,   ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g,  "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g,    " ")
+    .trim();
+}
+
+/**
+ * @param {string} url  - RSS/Atom feed URL
+ * @param {string} name - Label for log output
+ * @returns {Promise<Array<{title:string, description:string}>>}
+ */
+async function parseRSS(url, name) {
+  const articles = [];
+  try {
+    const { data } = await axios.get(url, {
+      timeout: 15000,
+      headers: {
+        // Identify as a standard feed reader — rarely blocked
+        "User-Agent": "Mozilla/5.0 (compatible; Feedfetcher-Google/1.0)",
+        "Accept":     "application/rss+xml, application/xml, text/xml, */*",
+      },
+    });
+
+    // xmlMode: true tells cheerio to handle self-closing tags correctly
+    const $ = cheerio.load(data, { xmlMode: true });
+
+    // Works for both RSS 2.0 (<item>) and Atom (<entry>)
+    $("item, entry").each((_, el) => {
+      const title = cleanText($(el).find("title").first().text());
+      const desc  = cleanText(
+        $(el).find("description, summary, content").first().text()
+      ).substring(0, 500);
+
+      if (title && title.length > 8) {
+        articles.push({ title, description: desc || title });
+      }
+    });
+
+    console.log(`  [${name}] ✅ ${articles.length} items`);
+  } catch (err) {
+    console.warn(`  [${name}] ⚠️  ${err.message}`);
+  }
+  return articles;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 7.  RSS SOURCE LIST
+//     Primary:   Google News RSS — aggregates every Indian outlet,
+//                works without an API key, never returns 404.
+//     Secondary: Direct outlet feeds for extra local depth.
+// ─────────────────────────────────────────────────────────────
+
+// Google News RSS base URL
+const GN = "https://news.google.com/rss/search?hl=en-IN&gl=IN&ceid=IN:en&q=";
+
+const RSS_SOURCES = [
+  // ── Google News queries (most reliable) ──────────────────────
+  {
+    name: "GNews › Mumbai Crime",
+    url : `${GN}${encodeURIComponent("Mumbai crime")}`,
+  },
+  {
+    name: "GNews › Mumbai Women Safety",
+    url : `${GN}${encodeURIComponent("Mumbai women safety harassment")}`,
+  },
+  {
+    name: "GNews › Mumbai Police Alert",
+    url : `${GN}${encodeURIComponent("Mumbai police FIR arrested")}`,
+  },
+  {
+    name: "GNews › Ghatkopar / Vidyavihar / Kurla",
+    url : `${GN}${encodeURIComponent("Ghatkopar OR Vidyavihar OR Kurla crime")}`,
+  },
+  {
+    name: "GNews › Mumbai Street Safety Infrastructure",
+    url : `${GN}${encodeURIComponent("Mumbai streetlight pothole unsafe")}`,
+  },
+
+  // ── Direct outlet RSS feeds ───────────────────────────────────
+  {
+    name: "Mid-Day RSS",
+    url : "https://www.mid-day.com/rss/mid-day-feed.xml",
+  },
+  {
+    // Official TOI Mumbai-city RSS feed ID
+    name: "Times of India Mumbai RSS",
+    url : "https://timesofindia.indiatimes.com/rss/4719161.cms",
+  },
+  {
+    name: "NDTV Latest News RSS",
+    url : "https://feeds.feedburner.com/NDTV-LatestNews",
+  },
+  {
+    name: "Free Press Journal RSS",
+    url : "https://www.freepressjournal.in/feed",
+  },
+  {
+    name: "Mumbai Live Crime RSS",
+    url : "https://www.mumbailive.com/rss/en/crime",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────
+// 8.  DEDUPLICATION — load recent titles from Supabase
+// ─────────────────────────────────────────────────────────────
 async function fetchExistingTitles() {
   const { data, error } = await supabase
     .from("reports")
     .select("title")
     .order("created_at", { ascending: false })
-    .limit(500);                              // Check last 500 records
+    .limit(500);
 
   if (error) {
-    console.error("[Supabase] Could not fetch existing titles:", error.message);
+    console.error("[Supabase] Could not load titles:", error.message);
     return new Set();
   }
-
   return new Set(data.map((r) => r.title.toLowerCase().trim()));
 }
 
-// ─────────────────────────────────────────────
-// 8.  BATCH INSERT
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 9.  BATCH INSERT
+// ─────────────────────────────────────────────────────────────
 async function insertReports(reports) {
   if (reports.length === 0) {
-    console.log("[Supabase] Nothing new to insert.");
+    console.log("\n[Supabase] Nothing new to insert.");
     return;
   }
-
   const { error } = await supabase.from("reports").insert(reports);
   if (error) {
-    console.error("[Supabase] Insert error:", error.message);
+    console.error("\n[Supabase] ❌ Insert error:", error.message);
   } else {
-    console.log(`[Supabase] ✅ Inserted ${reports.length} new report(s).`);
+    console.log(`\n[Supabase] ✅ Inserted ${reports.length} new report(s).`);
   }
 }
 
-// ─────────────────────────────────────────────
-// 9.  MAIN ORCHESTRATOR
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 10.  MAIN ORCHESTRATOR
+// ─────────────────────────────────────────────────────────────
 async function runCrawler() {
-  console.log("=".repeat(55));
-  console.log(" 🕷️  Project Guardian — Crawler Starting");
-  console.log("=".repeat(55));
+  console.log("=".repeat(58));
+  console.log("  🕷️  Project Guardian — Crawler v2  (RSS-First)");
+  console.log("=".repeat(58));
 
-  // ── 9a. Validate environment variables ──
+  // ── Validate environment ──────────────────────────────────────
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
     console.error(
-      "[Config] ❌ Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in .env"
+      "\n[Config] ❌ Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in .env"
     );
     process.exit(1);
   }
 
-  // ── 9b. Scrape all sources in parallel ──
-  console.log("\n[Crawler] Scraping all sources in parallel…");
-  const [midday, toi, fpj, ht, ml] = await Promise.allSettled([
-    scrapeMidDay(),
-    scrapeTOI(),
-    scrapeFPJ(),
-    scrapeHindustanTimes(),
-    scrapeMumbaiLive(),
-  ]);
+  // ── Fetch all RSS feeds concurrently ─────────────────────────
+  console.log(`\n[Crawler] Fetching ${RSS_SOURCES.length} RSS feeds…\n`);
 
-  // Flatten results; handle any rejected promises gracefully
-  const raw = [
-    ...(midday.status === "fulfilled" ? midday.value : []),
-    ...(toi.status    === "fulfilled" ? toi.value    : []),
-    ...(fpj.status    === "fulfilled" ? fpj.value    : []),
-    ...(ht.status     === "fulfilled" ? ht.value     : []),
-    ...(ml.status     === "fulfilled" ? ml.value     : []),
-  ];
+  const settled = await Promise.allSettled(
+    RSS_SOURCES.map(({ url, name }) => parseRSS(url, name))
+  );
 
-  console.log(`[Crawler] Raw articles collected: ${raw.length}`);
+  const raw = settled.flatMap((r) =>
+    r.status === "fulfilled" ? r.value : []
+  );
 
-  // ── 9c. Filter for safety relevance ──
+  console.log(`\n[Crawler] Total raw items         : ${raw.length}`);
+
+  // ── Filter for safety relevance ──────────────────────────────
   const relevant = raw.filter(({ title, description }) =>
     isSafetyRelevant(title, description)
   );
-  console.log(`[Crawler] Safety-relevant articles: ${relevant.length}`);
+  console.log(`[Crawler] Safety-relevant items   : ${relevant.length}`);
 
-  // ── 9d. Load existing titles for deduplication ──
-  console.log("[Supabase] Fetching existing titles for deduplication…");
+  // ── Load existing titles ──────────────────────────────────────
+  console.log("[Supabase] Loading deduplication set…");
   const existingTitles = await fetchExistingTitles();
-  console.log(`[Supabase] Existing records checked: ${existingTitles.size}`);
+  console.log(`[Supabase] Existing records        : ${existingTitles.size}`);
 
-  // ── 9e. Build report objects ──
-  const seenInBatch = new Set();           // Prevent duplicates within this run
-  const toInsert = [];
+  // ── Build insert payload ──────────────────────────────────────
+  const seenThisRun = new Set();
+  const toInsert    = [];
 
   for (const { title, description } of relevant) {
-    const normalizedTitle = title.toLowerCase().trim();
+    const key = title.toLowerCase().trim();
 
-    // Skip if already in DB or seen in this batch
-    if (existingTitles.has(normalizedTitle) || seenInBatch.has(normalizedTitle)) {
-      continue;
-    }
-    seenInBatch.add(normalizedTitle);
+    if (existingTitles.has(key) || seenThisRun.has(key)) continue;
+    seenThisRun.add(key);
 
-    const combined = `${title} ${description}`;
+    const combined  = `${title} ${description}`;
     const { lat, lng } = geocodeFromText(combined);
-    const category = classifyCategory(combined);
+    const category  = classifyCategory(combined);
 
-    // Clamp coordinates to Mumbai bounds (safety net)
-    const safeLat = Math.max(MUMBAI_BOUNDS.latMin, Math.min(MUMBAI_BOUNDS.latMax, lat));
-    const safeLng = Math.max(MUMBAI_BOUNDS.lngMin, Math.min(MUMBAI_BOUNDS.lngMax, lng));
+    // Hard-clamp coordinates to the Mumbai bounding box
+    const safeLat = Math.max(
+      MUMBAI_BOUNDS.latMin,
+      Math.min(MUMBAI_BOUNDS.latMax, lat)
+    );
+    const safeLng = Math.max(
+      MUMBAI_BOUNDS.lngMin,
+      Math.min(MUMBAI_BOUNDS.lngMax, lng)
+    );
 
     toInsert.push({
-      title: title.substring(0, 255),          // Guard against overly long titles
+      title      : title.substring(0, 255),
       category,
       description: description.substring(0, 500),
-      lat: parseFloat(safeLat.toFixed(6)),
-      lng: parseFloat(safeLng.toFixed(6)),
-      upvotes: 0,
-      status: "active",
+      lat        : parseFloat(safeLat.toFixed(6)),
+      lng        : parseFloat(safeLng.toFixed(6)),
+      upvotes    : 0,
+      status     : "active",
     });
   }
 
-  console.log(`[Crawler] New unique reports to insert: ${toInsert.length}`);
+  console.log(`[Crawler] New unique reports       : ${toInsert.length}`);
 
-  // ── 9f. Insert into Supabase ──
+  // ── Insert into Supabase ──────────────────────────────────────
   await insertReports(toInsert);
 
-  console.log("\n" + "=".repeat(55));
-  console.log(" ✅ Crawler run complete.");
-  console.log("=".repeat(55));
+  console.log("\n" + "=".repeat(58));
+  console.log("  ✅  Crawler run complete.");
+  console.log("=".repeat(58) + "\n");
 }
 
-// ─────────────────────────────────────────────
-// 10.  ENTRY POINT
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// 11.  ENTRY POINT
+// ─────────────────────────────────────────────────────────────
 runCrawler().catch((err) => {
   console.error("[Fatal]", err);
   process.exit(1);
