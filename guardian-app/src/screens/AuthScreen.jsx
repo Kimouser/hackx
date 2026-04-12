@@ -10,47 +10,47 @@ const { width } = Dimensions.get('window');
 
 // ── Themes ────────────────────────────────────────────────────────────────────
 
+// Matches MapScreen exactly: dark navy + purple accent + teal highlight
 const userTheme = {
-  bg:              '#0a0f0a',
-  surface:         '#111811',
-  surfaceAlt:      '#0d140d',
-  border:          '#1e3a1e',
-  borderActive:    '#00e676',
-  accent:          '#00e676',
-  accentDim:       '#00e67614',
-  accentGlow:      '#00e67633',
-  textPrimary:     '#e8f5e8',
-  textSecondary:   '#6aab6a',
-  textMuted:       '#3d6b3d',
-  btnText:         '#0a0f0a',
-  shield:          '🛡️',
-  taglineIcon:     '🗺️',
-  dividerColor:    '#00e676',
-  inputShadow:     'transparent',
-  particleColor:   '#00e676',
+  bg:            '#070710',
+  surface:       '#0f0f1e',
+  surfaceAlt:    '#0b0b16',
+  border:        '#1a1a30',
+  borderActive:  '#7c4dff',
+  accent:        '#7c4dff',
+  accentDim:     'rgba(124,77,255,0.14)',
+  accentGlow:    'rgba(124,77,255,0.40)',
+  textPrimary:   '#eceaf8',
+  textSecondary: '#8e8aaa',
+  textMuted:     '#48456a',
+  btnText:       '#ffffff',
+  dividerColor:  '#7c4dff',
+  inputShadow:   'transparent',
+  particleColor: '#7c4dff',
+  teal:          '#06d6a0',
 };
 
+// Angelic golden — unchanged
 const volunteerTheme = {
-  bg:              '#fdf9f0',
-  surface:         '#fffdf7',
-  surfaceAlt:      '#fef9ec',
-  border:          '#e8d9b0',
-  borderActive:    '#c9972a',
-  accent:          '#c9972a',
-  accentDim:       '#c9972a18',
-  accentGlow:      '#f0c040aa',
-  textPrimary:     '#2d2010',
-  textSecondary:   '#7a5c1e',
-  textMuted:       '#b89a50',
-  btnText:         '#fff8e8',
-  shield:          '👼',
-  taglineIcon:     '✨',
-  dividerColor:    '#c9972a',
-  inputShadow:     '#f0c04020',
-  particleColor:   '#f0c040',
+  bg:            '#fdf9f0',
+  surface:       '#fffdf7',
+  surfaceAlt:    '#fef9ec',
+  border:        '#e8d9b0',
+  borderActive:  '#c9972a',
+  accent:        '#c9972a',
+  accentDim:     '#c9972a18',
+  accentGlow:    '#f0c040aa',
+  textPrimary:   '#2d2010',
+  textSecondary: '#7a5c1e',
+  textMuted:     '#b89a50',
+  btnText:       '#fff8e8',
+  dividerColor:  '#c9972a',
+  inputShadow:   '#f0c04020',
+  particleColor: '#f0c040',
+  teal:          '#c9972a',
 };
 
-// ── Particle component (floating orbs) ────────────────────────────────────────
+// ── Floating orbs (volunteer mode) ───────────────────────────────────────────
 
 const FloatingOrb = ({ style, color }) => {
   const anim = useRef(new Animated.Value(0)).current;
@@ -63,26 +63,26 @@ const FloatingOrb = ({ style, color }) => {
     ).start();
   }, []);
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -18] });
-  const opacity    = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.15, 0.55, 0.15] });
+  const opacity    = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.12, 0.45, 0.12] });
   return (
     <Animated.View style={[style, { transform: [{ translateY }], opacity, backgroundColor: color, borderRadius: 100 }]} />
   );
 };
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 const AuthScreen = ({ navigation }) => {
-  const [isLogin, setIsLogin]     = useState(true);
-  const [role, setRole]           = useState('user');
-  const [name, setName]           = useState('');
-  const [email, setEmail]         = useState('');
-  const [password, setPassword]   = useState('');
-  const [aadhar, setAadhar]       = useState('');
-  const [area, setArea]           = useState('');
+  const [isLogin,   setIsLogin]   = useState(true);
+  const [role,      setRole]      = useState('user');
+  const [name,      setName]      = useState('');
+  const [email,     setEmail]     = useState('');
+  const [password,  setPassword]  = useState('');
+  const [aadhar,    setAadhar]    = useState('');
+  const [area,      setArea]      = useState('');
 
-  const themeAnim = useRef(new Animated.Value(0)).current;
+  const themeAnim   = useRef(new Animated.Value(0)).current;
   const isVolunteer = role === 'volunteer';
-  const T = isVolunteer ? volunteerTheme : userTheme;
+  const T           = isVolunteer ? volunteerTheme : userTheme;
 
   useEffect(() => {
     Animated.timing(themeAnim, {
@@ -92,10 +92,8 @@ const AuthScreen = ({ navigation }) => {
     }).start();
   }, [isVolunteer]);
 
-  // Interpolated animated colors
-  const animBg      = themeAnim.interpolate({ inputRange: [0, 1], outputRange: [userTheme.bg, volunteerTheme.bg] });
-  const animAccent  = themeAnim.interpolate({ inputRange: [0, 1], outputRange: [userTheme.accent, volunteerTheme.accent] });
-  const animTitle   = themeAnim.interpolate({ inputRange: [0, 1], outputRange: [userTheme.accent, volunteerTheme.accent] });
+  const animBg    = themeAnim.interpolate({ inputRange: [0, 1], outputRange: [userTheme.bg,     volunteerTheme.bg] });
+  const animTitle = themeAnim.interpolate({ inputRange: [0, 1], outputRange: [userTheme.accent, volunteerTheme.accent] });
 
   const handleSubmit = async () => {
     try {
@@ -114,32 +112,38 @@ const AuthScreen = ({ navigation }) => {
 
   return (
     <Animated.View style={[s.root, { backgroundColor: animBg }]}>
-      {/* Ambient orbs — angelic mode only */}
+
+      {/* Volunteer ambient orbs */}
       {isVolunteer && (
         <>
-          <FloatingOrb color={volunteerTheme.particleColor} style={{ position:'absolute', top:60,  left:30,  width:80,  height:80 }} />
-          <FloatingOrb color={volunteerTheme.particleColor} style={{ position:'absolute', top:120, right:20, width:50,  height:50 }} />
-          <FloatingOrb color='#fff0c0'                       style={{ position:'absolute', top:200, left:width*0.4, width:36, height:36 }} />
-          <FloatingOrb color={volunteerTheme.particleColor} style={{ position:'absolute', top:300, right:60, width:24, height:24 }} />
+          <FloatingOrb color={volunteerTheme.particleColor} style={{ position: 'absolute', top: 60,  left: 30,        width: 80, height: 80 }} />
+          <FloatingOrb color={volunteerTheme.particleColor} style={{ position: 'absolute', top: 120, right: 20,       width: 50, height: 50 }} />
+          <FloatingOrb color='#fff0c0'                      style={{ position: 'absolute', top: 200, left: width*0.4, width: 36, height: 36 }} />
+          <FloatingOrb color={volunteerTheme.particleColor} style={{ position: 'absolute', top: 300, right: 60,       width: 24, height: 24 }} />
         </>
       )}
 
-      {/* Dark-mode radial glow */}
+      {/* User mode: subtle purple + teal nebula */}
       {!isVolunteer && (
-        <View style={s.bgGlow} pointerEvents="none" />
+        <>
+          <View style={s.bgNebulaTop}    pointerEvents="none" />
+          <View style={s.bgNebulaBottom} pointerEvents="none" />
+        </>
       )}
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* ── Logo area ── */}
+          {/* ── Logo ── */}
           <View style={s.logoArea}>
             {isVolunteer ? (
               <View style={s.haloRing}>
                 <Text style={s.shieldEmoji}>👼</Text>
               </View>
             ) : (
-              <Text style={s.shieldEmoji}>🛡️</Text>
+              <View style={s.shieldRing}>
+                <Text style={s.shieldEmoji}>🛡️</Text>
+              </View>
             )}
 
             <Animated.Text style={[s.title, { color: animTitle }]}>
@@ -153,9 +157,7 @@ const AuthScreen = ({ navigation }) => {
             <View style={s.divider} />
 
             <Text style={s.subtitle}>
-              {isVolunteer
-                ? 'Protect. Serve. Shine.'
-                : 'Navigate Safe. Stay Protected.'}
+              {isVolunteer ? 'Protect. Serve. Shine.' : 'Navigate Safe. Stay Protected.'}
             </Text>
           </View>
 
@@ -166,18 +168,14 @@ const AuthScreen = ({ navigation }) => {
               onPress={() => setRole('user')}
               activeOpacity={0.8}
             >
-              <Text style={[s.roleText, role === 'user' && s.selectedRoleText]}>
-                👤  User
-              </Text>
+              <Text style={[s.roleText, role === 'user' && s.selectedRoleText]}>👤  User</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.roleBtn, role === 'volunteer' && s.selectedRole]}
               onPress={() => setRole('volunteer')}
               activeOpacity={0.8}
             >
-              <Text style={[s.roleText, role === 'volunteer' && s.selectedRoleText]}>
-                👼  Volunteer
-              </Text>
+              <Text style={[s.roleText, role === 'volunteer' && s.selectedRoleText]}>👼  Volunteer</Text>
             </TouchableOpacity>
           </View>
 
@@ -232,9 +230,9 @@ const AuthScreen = ({ navigation }) => {
             />
 
             <TouchableOpacity style={s.btn} onPress={handleSubmit} activeOpacity={0.85}>
-              {isVolunteer && <Text style={s.btnGlow}>✦</Text>}
+              {isVolunteer && <Text style={s.btnGlyph}>✦</Text>}
               <Text style={s.btnText}>{isLogin ? 'Login' : 'Sign Up'}</Text>
-              {isVolunteer && <Text style={s.btnGlow}>✦</Text>}
+              {isVolunteer && <Text style={s.btnGlyph}>✦</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setIsLogin(!isLogin)} activeOpacity={0.7}>
@@ -277,21 +275,36 @@ const AuthScreen = ({ navigation }) => {
   );
 };
 
-// ── Dynamic styles factory ─────────────────────────────────────────────────────
+// ── Dynamic styles ────────────────────────────────────────────────────────────
 
 const makeStyles = (T) => StyleSheet.create({
-  root:        { flex: 1 },
-  scroll:      { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
+  root:   { flex: 1 },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
 
-  bgGlow: {
-    position: 'absolute', top: -100, left: width / 2 - 180,
-    width: 360, height: 360,
-    borderRadius: 180,
-    backgroundColor: '#00e67608',
+  // User-mode background nebula (purple top, teal bottom-right)
+  bgNebulaTop: {
+    position: 'absolute', top: -120, left: width / 2 - 160,
+    width: 320, height: 320, borderRadius: 160,
+    backgroundColor: 'rgba(124,77,255,0.07)',
+  },
+  bgNebulaBottom: {
+    position: 'absolute', bottom: 60, right: -80,
+    width: 260, height: 260, borderRadius: 130,
+    backgroundColor: 'rgba(6,214,160,0.05)',
   },
 
   // Logo
-  logoArea:    { alignItems: 'center', marginBottom: 32 },
+  logoArea: { alignItems: 'center', marginBottom: 32 },
+
+  shieldRing: {
+    width: 104, height: 104, borderRadius: 52,
+    borderWidth: 1, borderColor: 'rgba(124,77,255,0.35)',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(124,77,255,0.06)',
+    shadowColor: '#7c4dff', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5, shadowRadius: 18, elevation: 10,
+    marginBottom: 4,
+  },
   haloRing: {
     width: 104, height: 104, borderRadius: 52,
     borderWidth: 2, borderColor: '#f0c040',
@@ -301,21 +314,16 @@ const makeStyles = (T) => StyleSheet.create({
     backgroundColor: '#fffbe8',
     marginBottom: 4,
   },
-  shieldEmoji: { fontSize: 72, marginBottom: 10 },
-  title: {
-    fontSize: 30, fontWeight: '800',
-    letterSpacing: 0.4, marginBottom: 4,
-  },
-  tagline:     { fontSize: 13, color: T.textSecondary, marginTop: 2, letterSpacing: 0.2 },
-  divider: {
-    width: 36, height: 2, backgroundColor: T.dividerColor,
-    marginVertical: 12, borderRadius: 1,
-  },
-  subtitle:    { fontSize: 12, color: T.textMuted, fontStyle: 'italic' },
+  shieldEmoji: { fontSize: 66, marginBottom: 10 },
+
+  title:    { fontSize: 30, fontWeight: '800', letterSpacing: 0.4, marginBottom: 4 },
+  tagline:  { fontSize: 13, color: T.textSecondary, marginTop: 2, letterSpacing: 0.2 },
+  divider:  { width: 36, height: 2, backgroundColor: T.dividerColor, marginVertical: 12, borderRadius: 1 },
+  subtitle: { fontSize: 12, color: T.textMuted, fontStyle: 'italic' },
 
   // Role toggle
   roleContainer: {
-    flexDirection: 'row', gap: 10, marginBottom: 22,
+    flexDirection: 'row', gap: 6, marginBottom: 22,
     backgroundColor: T.surfaceAlt,
     borderRadius: 12, padding: 4,
     borderWidth: 1, borderColor: T.border,
@@ -332,7 +340,7 @@ const makeStyles = (T) => StyleSheet.create({
     shadowOpacity: 1, shadowRadius: 8, elevation: 4,
   },
   roleText:         { color: T.textMuted, fontSize: 13, fontWeight: '500' },
-  selectedRoleText: { color: T.accent, fontWeight: '700' },
+  selectedRoleText: { color: T.accent,    fontSize: 13, fontWeight: '700' },
 
   // Form
   form:  { gap: 12 },
@@ -341,10 +349,8 @@ const makeStyles = (T) => StyleSheet.create({
     borderWidth: 1, borderColor: T.border,
     borderRadius: 12, padding: 15,
     color: T.textPrimary, fontSize: 15,
-    shadowColor: T.inputShadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 6, elevation: 2,
   },
+
   btn: {
     backgroundColor: T.accent,
     borderRadius: 12, padding: 16,
@@ -352,20 +358,17 @@ const makeStyles = (T) => StyleSheet.create({
     flexDirection: 'row', justifyContent: 'center', gap: 8,
     shadowColor: T.accentGlow,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.8, shadowRadius: 12, elevation: 8,
+    shadowOpacity: 0.8, shadowRadius: 14, elevation: 8,
   },
   btnText:  { color: T.btnText, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
-  btnGlow:  { color: T.btnText, fontSize: 14, opacity: 0.7 },
+  btnGlyph: { color: T.btnText, fontSize: 14, opacity: 0.7 },
+
   toggle:   { color: T.textSecondary, textAlign: 'center', marginTop: 12, fontSize: 13 },
   skipBtn:  { marginTop: 14, alignItems: 'center' },
   skipText: { color: T.textMuted, fontSize: 13 },
 
   // Features
-  features: {
-    marginTop: 32, paddingTop: 20,
-    borderTopWidth: 1, borderTopColor: T.border,
-    gap: 10,
-  },
+  features:    { marginTop: 32, paddingTop: 20, borderTopWidth: 1, borderTopColor: T.border, gap: 10 },
   featureRow:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
   featureIcon: { fontSize: 17, width: 26, textAlign: 'center' },
   featureText: { color: T.textSecondary, fontSize: 13, flex: 1 },
