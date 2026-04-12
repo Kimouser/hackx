@@ -14,6 +14,10 @@
  *    GPIO 15 → External RED LED → 220 ohm → GND (SOS active)
  *    GPIO 13 → External GREEN LED → 220 ohm → GND (BLE connected)
  *    GPIO 12 → Vibration motor module signal pin (haptic feedback)
+ *    GPIO 21 → OLED SDA
+ *    GPIO 22 → OLED SCL
+ *    3.3V    → OLED VCC
+ *    GND     → OLED GND
  *
  *  BLE PROFILE:
  *    Device Name:       "Guardian-Bracelet"
@@ -47,17 +51,26 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
 
 // ════════════════════════════════════════════════════════════════
 // PIN DEFINITIONS
 // ════════════════════════════════════════════════════════════════
 
-#define SOS_BUTTON_PIN    4    // Tactile button → GND (INPUT_PULLUP)
+#define SOS_BUTTON_PIN   32    // Tactile button → GND (INPUT_PULLUP)
 #define LED_BUILTIN_PIN   2    // ESP32 onboard blue LED
 #define LED_RED_PIN       15   // External red LED (SOS active)
 #define LED_GREEN_PIN     13   // External green LED (BLE connected)
-#define VIBRATION_PIN     12   // Vibration motor signal
+#define VIBRATION_PIN     4   // Vibration motor signal
+#define OLED_SDA          21   // OLED I2C SDA
+#define OLED_SCL          22   // OLED I2C SCL
 
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 // ════════════════════════════════════════════════════════════════
 // BLE UUIDs (must match HardwareService.js in the app)
 // ════════════════════════════════════════════════════════════════
@@ -112,6 +125,7 @@ unsigned long     bootTime          = 0;
 // FORWARD DECLARATIONS
 // ════════════════════════════════════════════════════════════════
 void hapticPulse(int count);
+void updateOLED();
 
 // ════════════════════════════════════════════════════════════════
 // BLE CALLBACKS
@@ -127,6 +141,9 @@ class GuardianServerCallbacks : public BLEServerCallbacks {
 
     // Haptic confirmation: two short pulses
     hapticPulse(2);
+
+    // Update OLED
+    updateOLED();
   }
 
   void onDisconnect(BLEServer* pServer) {
@@ -139,6 +156,9 @@ class GuardianServerCallbacks : public BLEServerCallbacks {
     delay(500);
     pServer->startAdvertising();
     Serial.println("[BLE] Advertising restarted");
+
+    // Update OLED
+    updateOLED();
   }
 };
 
@@ -157,6 +177,7 @@ class SOSCharCallbacks : public BLECharacteristicCallbacks {
         // App acknowledged the SOS
         Serial.println("[BLE] App confirmed SOS receipt");
         hapticPulse(1);
+        updateOLED();
       }
       else if (value == "CANCEL") {
         // App cancelled the SOS (user tapped "I'm Safe")
@@ -164,6 +185,7 @@ class SOSCharCallbacks : public BLECharacteristicCallbacks {
         digitalWrite(LED_RED_PIN, LOW);
         Serial.println("[BLE] SOS cancelled by app");
         hapticPulse(3);  // Three quick pulses = cancelled
+        updateOLED();
       }
       else if (value == "PING") {
         // Heartbeat from app
@@ -184,6 +206,35 @@ void hapticPulse(int count) {
     digitalWrite(VIBRATION_PIN, LOW);
     if (i < count - 1) delay(HAPTIC_PULSE_MS);  // Gap between pulses
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// OLED DISPLAY UPDATE
+// ════════════════════════════════════════════════════════════════
+
+void updateOLED() {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+
+  if (sosActive) {
+    display.println("SOS ACTIVE!");
+    display.setTextSize(1);
+    display.println("Help on the way...");
+  } else if (deviceConnected) {
+    display.println("CONNECTED");
+    display.setTextSize(1);
+    display.printf("Battery: %d%%\n", batteryLevel);
+    display.printf("Uptime: %lus\n", (millis() - bootTime) / 1000);
+  } else {
+    display.println("GUARDIAN");
+    display.setTextSize(1);
+    display.println("Advertising...");
+    display.printf("Battery: %d%%\n", batteryLevel);
+  }
+
+  display.display();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -234,15 +285,18 @@ void sendSOS(const char* type) {
     sosActive = true;
     digitalWrite(LED_RED_PIN, HIGH);
     hapticPulse(2);  // Two pulses = SOS sent
+    updateOLED();
   }
   else if (strcmp(type, "SOS_ESCALATED") == 0) {
     sosActive = true;
     hapticPulse(5);  // Five rapid pulses = escalated
+    updateOLED();
   }
   else if (strcmp(type, "SOS_CANCEL") == 0) {
     sosActive = false;
     digitalWrite(LED_RED_PIN, LOW);
     hapticPulse(1);
+    updateOLED();
   }
 }
 
@@ -254,11 +308,20 @@ void handleButton() {
   bool currentState = digitalRead(SOS_BUTTON_PIN) == LOW;  // Active LOW (pullup)
   unsigned long now = millis();
 
+  // Debug: print button state occasionally
+  static unsigned long lastDebug = 0;
+  if (now - lastDebug > 1000) {  // Every second
+    Serial.print("[Button] Pin state: ");
+    Serial.println(digitalRead(SOS_BUTTON_PIN));
+    lastDebug = now;
+  }
+
   if (currentState && !buttonPressed) {
     // ── BUTTON DOWN ──
     buttonPressed = true;
     buttonDownTime = now;
     longPressHandled = false;
+    Serial.println("[Button] Button pressed");
   }
 
   if (currentState && buttonPressed) {
@@ -274,6 +337,8 @@ void handleButton() {
     // ── BUTTON UP ──
     buttonPressed = false;
     unsigned long pressDuration = now - buttonDownTime;
+    Serial.print("[Button] Button released, duration: ");
+    Serial.println(pressDuration);
 
     if (longPressHandled) {
       // Long press already handled on hold
@@ -283,11 +348,14 @@ void handleButton() {
 
     if (pressDuration < DEBOUNCE_MS) {
       // Too short — noise
+      Serial.println("[Button] Ignored (too short)");
       return;
     }
 
     // Valid short press
     tapCount++;
+    Serial.print("[Button] Tap count: ");
+    Serial.println(tapCount);
 
     if (tapCount == 1) {
       lastReleaseTime = now;
@@ -296,6 +364,8 @@ void handleButton() {
 
   // ── Process taps after double-tap window expires ──
   if (tapCount > 0 && !buttonPressed && (now - lastReleaseTime > DOUBLE_TAP_WINDOW_MS)) {
+    Serial.print("[Button] Processing taps: ");
+    Serial.println(tapCount);
     if (tapCount >= 2) {
       // Double tap = cancel
       Serial.println("[Button] DOUBLE TAP detected → SOS_CANCEL");
@@ -383,6 +453,20 @@ void setup() {
   pinMode(LED_GREEN_PIN, OUTPUT);
   pinMode(VIBRATION_PIN, OUTPUT);
 
+  // OLED Setup
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.println("Guardian Bracelet");
+  display.println("Initializing...");
+  display.display();
+
   // All LEDs off initially
   digitalWrite(LED_BUILTIN_PIN, LOW);
   digitalWrite(LED_RED_PIN, LOW);
@@ -459,10 +543,17 @@ void loop() {
   // 2. Update LED indicators
   updateLEDs();
 
-  // 3. Report battery level periodically
+  // 3. Update OLED display periodically
+  static unsigned long lastOLEDUpdate = 0;
+  if (millis() - lastOLEDUpdate > 2000) {  // Update every 2 seconds
+    updateOLED();
+    lastOLEDUpdate = millis();
+  }
+
+  // 4. Report battery level periodically
   updateBattery();
 
-  // 4. Handle BLE reconnection
+  // 5. Handle BLE reconnection
   if (!deviceConnected && oldDeviceConnected) {
     delay(500);
     pServer->startAdvertising();
