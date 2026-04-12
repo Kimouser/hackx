@@ -1,8 +1,8 @@
 /**
- * database.js - Project Guardian (Supabase Edition)
- * Redirects all local storage calls to the Live Cloud Database.
+ * database.js - Project Guardian (Supabase + AI Moderation Edition)
  */
 import { createClient } from '@supabase/supabase-js';
+import { moderateReport } from '../services/moderationService';
 
 // 1. Connection Setup
 const supabaseUrl = 'https://bwlmblglaslgasutxyyd.supabase.co';
@@ -12,28 +12,66 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 
 /** ─── CORE EXPORTS ─── */
 
-/** Pulls EVERYTHING for the Map and Dashboard */
+/** * Create a new report with Real-time Gemini Moderation
+ * @param {Object} data - { title, description, latitude, longitude, category, imageBase64, image_uri }
+ */
+export const createReport = async (data) => {
+  try {
+    // 1. Run AI Moderation FIRST (Checks text and photo if present)
+    const aiResult = await moderateReport(
+      data.title, 
+      data.description, 
+      data.imageBase64 || null
+    );
+
+    // 2. Insert into Supabase with the AI's verdict
+    const { data: result, error } = await supabase
+      .from('reports')
+      .insert([{
+        title: data.title,
+        category: data.category,
+        lat: data.latitude, // Mapping frontend 'latitude' to DB 'lat'
+        lng: data.longitude, // Mapping frontend 'longitude' to DB 'lng'
+        description: data.description || '',
+        image_uri: data.image_uri || null,
+        upvotes: 0,
+        // AI Logic: APPROVED becomes 'active', REJECTED becomes 'flagged'
+        status: aiResult.status === 'APPROVED' ? 'active' : 'flagged',
+        ai_reason: aiResult.reason 
+      }])
+      .select();
+
+    if (error) throw error;
+    
+    // Return the full record for UI feedback
+    return result[0];
+  } catch (err) {
+    console.error('[DB] createReport Error:', err.message);
+    throw err;
+  }
+};
+
+/** Pulls EVERYTHING for the Map and Dashboard (Filtered by AI status) */
 export const getMapOverlay = async () => {
   try {
-    // Fetch Live Threats (Reports)
     const { data: threats, error: tErr } = await supabase
       .from('reports')
       .select('*')
+      // Only show AI-Approved reports on the public map
+      .eq('status', 'active')
       .order('created_at', { ascending: false });
 
-    // Fetch Live Safe Zones
     const { data: safeZones, error: sErr } = await supabase
       .from('safe_zones')
       .select('*');
 
     if (tErr || sErr) throw (tErr || sErr);
 
-    // MAPPING: Ensure DB 'lat/lng' works with App 'latitude/longitude'
     return {
       threats: (threats || []).map(t => ({
         ...t,
-        latitude: t.lat, // Maps crawler's 'lat' to frontend 'latitude'
-        longitude: t.lng, // Maps crawler's 'lng' to frontend 'longitude'
+        latitude: t.lat,
+        longitude: t.lng,
       })),
       safeZones: (safeZones || []).map(z => ({
         ...z,
@@ -45,25 +83,6 @@ export const getMapOverlay = async () => {
     console.error('[DB] Cloud Fetch Error:', err.message);
     return { threats: [], safeZones: [] };
   }
-};
-
-/** Create a new report from the 'Report' screen */
-export const createReport = async (data) => {
-  const { data: result, error } = await supabase
-    .from('reports')
-    .insert([{
-      title: data.title,
-      category: data.category,
-      lat: data.latitude,
-      lng: data.longitude,
-      description: data.description || '',
-      upvotes: 0,
-      status: 'active'
-    }])
-    .select();
-
-  if (error) throw error;
-  return result[0].id;
 };
 
 /** Dashboard Logic: Pulls all reports for the Priority Poll */
@@ -91,5 +110,5 @@ export const logEmergency = async (type, lat, lng) => {
   await supabase.from('emergency_logs').insert([{ trigger_type: type, lat, lng, status: 'triggered' }]);
 };
 
-export const setupDatabase = async () => console.log('[Guardian DB] Cloud Sync Active');
+export const setupDatabase = async () => console.log('[Guardian DB] Cloud Sync + AI Mod Active');
 export const resetDatabase = async () => console.warn('Wipe ignored: Manage Cloud data via Dashboard.');
