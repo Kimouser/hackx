@@ -2,7 +2,17 @@ import React from 'react';
 import { View, Platform, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-const LeafletMap = ({ center, zoom, threats, safeZones, safePaths, pathColor = '#7c4dff', pathWeight = 3 }) => {
+const LeafletMap = ({ 
+  center, 
+  zoom, 
+  threats, 
+  safeZones, 
+  safePaths, 
+  pathColor = '#7c4dff', 
+  pathWeight = 3,
+  tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  tileAttribution = '&copy; <a href="https://carto.com/">CARTO</a>'
+}) => {
 
   // 1. Generate the Javascript to inject markers AND paths
   const generateMapScript = (safeZonesData, threatsData, pathsData) => `
@@ -80,15 +90,16 @@ const LeafletMap = ({ center, zoom, threats, safeZones, safePaths, pathColor = '
   <body>
     <div id="map"></div>
     <script>
-      // Initialize the map (using the center prop if available, else default to Ahmedabad)
-      const startLat = ${center?.lat || 23.0225};
-      const startLng = ${center?.lng || 72.5714};
-      const startZoom = ${zoom || 13};
+      // Initialize the map (using the center prop if available, else default to Mumbai)
+      const startLat = ${center?.lat || 19.0730};
+      const startLng = ${center?.lng || 72.8995};
+      const startZoom = ${zoom || 15};
 
       const map = L.map('map', { zoomControl: false }).setView([startLat, startLng], startZoom);
 
-      L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; Stadia Maps'
+      // FIXED: Actually use the tileUrl prop instead of hardcoding Stadia
+      L.tileLayer('${tileUrl}', {
+        attribution: '${tileAttribution}'
       }).addTo(map);
 
       // Inject your markers and paths here
