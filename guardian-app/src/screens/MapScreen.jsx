@@ -79,7 +79,7 @@ const MapScreen = () => {
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
 
-  const [userLocName, setUserLocName] = useState('HELLO HACKATHON');
+  // FIXED: Removed the duplicate declaration here!
   const [mapCenter, setMapCenter] = useState({ lat: 19.0730, lng: 72.8995 });
   const [userLocName, setUserLocName] = useState('Mumbai, MH');
   
@@ -178,7 +178,6 @@ const MapScreen = () => {
 
   const mapSafeZones = showSafeZones ? activeSafeZones.map(zone => ({ ...zone, svgHtml: safeZoneIcon(zone.type, ICON_COLORS.safe) })) : [];
   let mapThreats = showThreats ? activeThreats.map(threat => ({ ...threat, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : [];
-  if (userLocation) mapThreats = [...mapThreats, { lat: userLocation.lat, lng: userLocation.lng, svgHtml: CURRENT_LOCATION_ICON() }];
 
   return (
     <View style={styles.root}>
