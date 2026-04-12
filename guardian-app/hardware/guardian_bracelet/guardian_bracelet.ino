@@ -25,18 +25,16 @@
  *    IP:           192.168.4.1
  *    Endpoints:
  *      GET /         - Status page
- *      GET /status   - JSON: {"sos":true/false,"battery":85}
+ *      GET /status   - JSON: {"sos":true/false}
  *      GET /sos      - Trigger SOS manually (for testing)
  *
  *  BUTTON BEHAVIOR:
- *    Single press (>50ms):    Send "SOS" once
- *    Long press (>3 sec):     Send "SOS_ESCALATED" (direct emergency)
- *    Double tap (<400ms gap): Send "SOS_CANCEL" (false alarm cancel)
+ *    Single press:    Trigger SOS
+ *    Double press:    Cancel SOS
  *
  *  LED PATTERNS:
  *    Green solid:       WiFi AP active
  *    Red solid:         SOS active
- *    Red fast blink:    SOS escalated
  *    All off:           Deep sleep (low power)
  *
  *  JUDGE NOTE:
@@ -80,11 +78,9 @@ WebServer server(80);
 // ════════════════════════════════════════════════════════════════
 
 #define DEBOUNCE_MS          50     // Button debounce
-#define LONG_PRESS_MS        3000   // 3 seconds for escalated SOS
-#define DOUBLE_TAP_WINDOW_MS 400    // Max gap between taps for double-tap
+#define DOUBLE_TAP_WINDOW_MS 400    // Max gap between presses for double press
 #define HAPTIC_PULSE_MS      200    // Vibration duration per pulse
 #define BLINK_INTERVAL_MS    500    // LED blink rate
-#define BATTERY_INTERVAL_MS  30000  // Battery level report interval
 
 // ════════════════════════════════════════════════════════════════
 // GLOBAL STATE
@@ -98,15 +94,10 @@ volatile bool     buttonPressed     = false;
 unsigned long     buttonDownTime    = 0;
 unsigned long     lastReleaseTime   = 0;
 int               tapCount          = 0;
-bool              longPressHandled  = false;
 
 // LED blink state
 unsigned long     lastBlinkTime     = 0;
 bool              blinkState        = false;
-
-// Battery reporting
-unsigned long     lastBatteryTime   = 0;
-uint8_t           batteryLevel      = 85;  // Simulated
 
 // Uptime counter (acts as timestamp for judge logs)
 unsigned long     bootTime          = 0;
@@ -124,14 +115,14 @@ void updateOLED();
 void handleRoot() {
   String html = "<html><body><h1>Guardian Bracelet</h1><p>Status: ";
   html += sosActive ? "SOS ACTIVE" : "IDLE";
-  html += "</p><p>Battery: " + String(batteryLevel) + "%</p></body></html>";
+  html += "</p></body></html>";
   server.send(200, "text/html", html);
 }
 
 void handleStatus() {
   String json = "{\"sos\":";
   json += sosTriggered ? "true" : "false";
-  json += ",\"battery\":" + String(batteryLevel) + "}";
+  json += "}";
   server.send(200, "application/json", json);
   if (sosTriggered) {
     sosTriggered = false;  // Reset after app reads
@@ -167,20 +158,20 @@ void hapticPulse(int count) {
 
 void updateOLED() {
   display.clearDisplay();
-  display.setTextSize(2);
+  display.setTextSize(3);  // Bigger text
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0,0);
 
   if (sosActive) {
-    display.println("SOS ACTIVE!");
+    display.println("SOS!");
     display.setTextSize(1);
-    display.println("Help on the way...");
+    display.println("Emergency triggered");
   } else {
+    display.setTextSize(2);
     display.println("GUARDIAN");
     display.setTextSize(1);
     display.println("WiFi AP Active");
     display.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
-    display.printf("Battery: %d%%\n", batteryLevel);
   }
 
   display.display();
@@ -188,7 +179,7 @@ void updateOLED() {
 
 /**
  * Trigger SOS signal.
- * @param type  "SOS", "SOS_ESCALATED", or "SOS_CANCEL"
+ * @param type  "SOS" or "SOS_CANCEL"
  */
 void sendSOS(const char* type) {
   // ── Judge-friendly serial log ──
@@ -198,9 +189,6 @@ void sendSOS(const char* type) {
   Serial.print(" Received at uptime ");
   Serial.print((millis() - bootTime) / 1000);
   Serial.println(" seconds");
-  Serial.print("  Battery: ");
-  Serial.print(batteryLevel);
-  Serial.println("%");
   Serial.println("════════════════════════════════════════");
 
   // ── Visual + haptic feedback ──
@@ -209,12 +197,6 @@ void sendSOS(const char* type) {
     sosTriggered = true;
     digitalWrite(LED_RED_PIN, HIGH);
     hapticPulse(2);  // Two pulses = SOS sent
-    updateOLED();
-  }
-  else if (strcmp(type, "SOS_ESCALATED") == 0) {
-    sosActive = true;
-    sosTriggered = true;
-    hapticPulse(5);  // Five rapid pulses = escalated
     updateOLED();
   }
   else if (strcmp(type, "SOS_CANCEL") == 0) {
@@ -234,29 +216,11 @@ void handleButton() {
   bool currentState = digitalRead(SOS_BUTTON_PIN) == LOW;  // Active LOW (pullup)
   unsigned long now = millis();
 
-  // Debug: print button state occasionally (disabled for stability)
-  // static unsigned long lastDebug = 0;
-  // if (now - lastDebug > 1000) {  // Every second
-  //   Serial.print("[Button] Pin state: ");
-  //   Serial.println(digitalRead(SOS_BUTTON_PIN));
-  //   lastDebug = now;
-  // }
-
   if (currentState && !buttonPressed) {
     // ── BUTTON DOWN ──
     buttonPressed = true;
     buttonDownTime = now;
-    longPressHandled = false;
     Serial.println("[Button] Button pressed");
-  }
-
-  if (currentState && buttonPressed) {
-    // ── HELD DOWN — check for long press ──
-    if (!longPressHandled && (now - buttonDownTime >= LONG_PRESS_MS)) {
-      longPressHandled = true;
-      Serial.println("[Button] LONG PRESS detected → SOS_ESCALATED");
-      sendSOS("SOS_ESCALATED");
-    }
   }
 
   if (!currentState && buttonPressed) {
@@ -266,19 +230,13 @@ void handleButton() {
     Serial.print("[Button] Button released, duration: ");
     Serial.println(pressDuration);
 
-    if (longPressHandled) {
-      // Long press already handled on hold
-      tapCount = 0;
-      return;
-    }
-
     if (pressDuration < DEBOUNCE_MS) {
       // Too short — noise
       Serial.println("[Button] Ignored (too short)");
       return;
     }
 
-    // Valid short press
+    // Valid press
     tapCount++;
     Serial.print("[Button] Tap count: ");
     Serial.println(tapCount);
@@ -293,11 +251,11 @@ void handleButton() {
     Serial.print("[Button] Processing taps: ");
     Serial.println(tapCount);
     if (tapCount >= 2) {
-      // Double tap = cancel
-      Serial.println("[Button] DOUBLE TAP detected → SOS_CANCEL");
+      // Double press = cancel SOS
+      Serial.println("[Button] DOUBLE PRESS detected → SOS_CANCEL");
       sendSOS("SOS_CANCEL");
     } else {
-      // Single tap = SOS
+      // Single press = SOS
       Serial.println("[Button] SINGLE PRESS detected → SOS");
       sendSOS("SOS");
     }
@@ -310,41 +268,23 @@ void handleButton() {
 // ════════════════════════════════════════════════════════════════
 
 void updateLEDs() {
-  unsigned long now = millis();
-
   // ── Green LED: WiFi status ──
   digitalWrite(LED_GREEN_PIN, HIGH);  // Solid = WiFi AP active
 
   // ── Red LED: SOS status ──
-  if (sosActive) {
-    // Fast blink when SOS is active
-    if (now - lastBlinkTime >= BLINK_INTERVAL_MS) {
-      lastBlinkTime = now;
-      digitalWrite(LED_RED_PIN, !digitalRead(LED_RED_PIN));
-    }
-  }
+  digitalWrite(LED_RED_PIN, sosActive ? HIGH : LOW);
 
   // ── Built-in LED mirrors SOS state ──
   digitalWrite(LED_BUILTIN_PIN, sosActive ? HIGH : LOW);
 }
 
 // ════════════════════════════════════════════════════════════════
-// BATTERY SIMULATION
+// BATTERY SIMULATION (disabled)
 // ════════════════════════════════════════════════════════════════
 
-void updateBattery() {
-  // Disabled for demo stability
-  // if (millis() - lastBatteryTime < BATTERY_INTERVAL_MS) return;
-  // lastBatteryTime = millis();
-  // if (batteryLevel > 10) batteryLevel--;
-  // if (deviceConnected && pBatteryChar != NULL) {
-  //   pBatteryChar->setValue(&batteryLevel, 1);
-  //   pBatteryChar->notify();
-  //   Serial.print("[Battery] Level: ");
-  //   Serial.print(batteryLevel);
-  //   Serial.println("%");
-  // }
-}
+// void updateBattery() {
+//   // Disabled for demo stability
+// }
 
 // ════════════════════════════════════════════════════════════════
 // SETUP
@@ -356,7 +296,7 @@ void setup() {
 
   Serial.println();
   Serial.println("╔══════════════════════════════════════════╗");
-  Serial.println("║   GUARDIAN BRACELET — ESP32 BLE v1.0     ║");
+  Serial.println("║   GUARDIAN BRACELET — ESP32 WiFi v1.0    ║");
   Serial.println("║   Project Guardian — Safe-Passage        ║");
   Serial.println("╚══════════════════════════════════════════╝");
   Serial.println();
