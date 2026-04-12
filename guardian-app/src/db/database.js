@@ -1,182 +1,114 @@
 /**
- * Guardian Database — In-Memory Store
- *
- * Uses a pure JS in-memory data store that works on Web + iOS + Android
- * with zero native dependencies. Data is pre-seeded from seed.js on init.
- *
- * For production: swap this with expo-sqlite (native) or an API backend.
+ * database.js - Project Guardian (Supabase + AI Moderation Edition)
  */
+import { createClient } from '@supabase/supabase-js';
+import { moderateReport } from '../services/moderationService';
 
-import { SEED_REPORTS, SEED_SAFE_ZONES } from './seed';
+// 1. Connection Setup
+const supabaseUrl = 'https://bwlmblglaslgasutxyyd.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3bG1ibGdsYXNsZ2FzdXR4eXlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MTc4NTQsImV4cCI6MjA5MTQ5Mzg1NH0.g37KcDIM4V2RmZTuRjKW961XgtQCfL1PALb8Yp2hI-M';
 
-// ─── In-Memory Tables ───
-let reports = [];
-let safeZones = [];
-let emergencyLogs = [];
-let users = [];
-let nextReportId = 1;
-let nextLogId = 1;
-let nextUserId = 1;
-let initialized = false;
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ─── Init & Seed ───
-export const getDatabase = async () => {
-  if (initialized) return;
-  initialized = true;
+/** ─── CORE EXPORTS ─── */
 
-  // Seed with mock data
-  reports = SEED_REPORTS.map((r, i) => ({
-    id: i + 1,
-    ...r,
-    userUpvoted: false,
-    created_at: new Date().toISOString(),
-  }));
-  nextReportId = reports.length + 1;
+/** * Create a new report with Real-time Gemini Moderation
+ * @param {Object} data - { title, description, latitude, longitude, category, imageBase64, image_uri }
+ */
+export const createReport = async (data) => {
+  try {
+    // 1. Run AI Moderation FIRST (Checks text and photo if present)
+    const aiResult = await moderateReport(
+      data.title, 
+      data.description, 
+      data.imageBase64 || null
+    );
 
-  safeZones = SEED_SAFE_ZONES.map((z, i) => ({
-    id: i + 1,
-    ...z,
-    is_verified: 1,
-    operating_hours: '24/7',
-    created_at: new Date().toISOString(),
-  }));
+    // 2. Insert into Supabase with the AI's verdict
+    const { data: result, error } = await supabase
+      .from('reports')
+      .insert([{
+        title: data.title,
+        category: data.category,
+        lat: data.latitude, // Mapping frontend 'latitude' to DB 'lat'
+        lng: data.longitude, // Mapping frontend 'longitude' to DB 'lng'
+        description: data.description || '',
+        image_uri: data.image_uri || null,
+        upvotes: 0,
+        // AI Logic: APPROVED becomes 'active', REJECTED becomes 'flagged'
+        status: aiResult.status === 'APPROVED' ? 'active' : 'flagged',
+        ai_reason: aiResult.reason 
+      }])
+      .select();
 
-  console.log(`[Guardian DB] Seeded ${reports.length} threat reports + ${safeZones.length} safe zones`);
-};
-
-// ─── Report CRUD ───
-export const getAllReports = async () => {
-  return [...reports]
-    .filter((r) => r.status !== 'resolved')
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-};
-
-export const getReportsForMap = async () => {
-  return reports
-    .filter((r) => r.status !== 'resolved')
-    .map((r) => ({
-      id: r.id,
-      title: r.title,
-      category: r.category,
-      severity: r.severity,
-      latitude: r.latitude,
-      longitude: r.longitude,
-      upvotes: r.upvotes,
-      status: r.status,
-    }));
-};
-
-export const createReport = async ({ title, description, category, severity, latitude, longitude }) => {
-  const id = nextReportId++;
-  const report = {
-    id,
-    title,
-    description: description || '',
-    category,
-    severity: severity || 'medium',
-    latitude,
-    longitude,
-    upvotes: 0,
-    status: 'active',
-    municipal_email_sent: 0,
-    municipal_email_date: null,
-    image_uri: '',
-    userUpvoted: false,
-    created_at: new Date().toISOString(),
-  };
-  reports.push(report);
-  console.log(`[Guardian DB] New report #${id}: ${title}`);
-  return id;
-};
-
-export const upvoteReport = async (id) => {
-  const report = reports.find((r) => r.id === id);
-  if (!report) throw new Error('Report not found');
-
-  if (!report.userUpvoted) {
-    report.upvotes += 1;
-    report.userUpvoted = true;
-
-    // Municipal Loop: auto-trigger at 10 upvotes
-    if (report.upvotes >= 10 && !report.municipal_email_sent) {
-      report.municipal_email_sent = 1;
-      report.municipal_email_date = new Date().toISOString();
-      report.status = 'municipal_notified';
-      console.log(`[Guardian DB] Municipal Loop triggered for report #${id}`);
-      return { ...report, municipalTriggered: true };
-    }
-  } else {
-    report.upvotes = Math.max(0, report.upvotes - 1);
-    report.userUpvoted = false;
+    if (error) throw error;
+    
+    // Return the full record for UI feedback
+    return result[0];
+  } catch (err) {
+    console.error('[DB] createReport Error:', err.message);
+    throw err;
   }
-
-  return { ...report, municipalTriggered: false };
 };
 
-// ─── User CRUD ───
-export const createUser = async ({ name, email, password, role, aadhar, area }) => {
-  const existing = users.find(u => u.email === email);
-  if (existing) throw new Error('User already exists');
-
-  const id = nextUserId++;
-  const user = {
-    id,
-    name,
-    email,
-    password, // In real app, hash this
-    role, // 'user' or 'volunteer'
-    aadhar: role === 'volunteer' ? aadhar : null,
-    area: role === 'volunteer' ? area : null,
-    created_at: new Date().toISOString(),
-  };
-  users.push(user);
-  console.log(`[Guardian DB] New user #${id}: ${name} (${role})`);
-  return { ...user, password: undefined };
-};
-
-export const loginUser = async ({ name, email, password, role }) => {
-  const user = users.find(u => u.email === email && u.password === password && u.role === role);
-  if (!user) throw new Error('Invalid credentials');
-  console.log(`[Guardian DB] Login: ${user.name}`);
-  return { ...user, password: undefined };
-};
-
-// ─── SafeZone Queries ───
-export const getAllSafeZones = async () => {
-  return [...safeZones].sort((a, b) => a.category.localeCompare(b.category));
-};
-
-export const getSafeZonesForMap = async () => {
-  return safeZones.map((z) => ({
-    id: z.id,
-    name: z.name,
-    category: z.category,
-    latitude: z.latitude,
-    longitude: z.longitude,
-    phone: z.phone,
-  }));
-};
-
-// ─── Map Overlay (combined) ───
+/** Pulls EVERYTHING for the Map and Dashboard (Filtered by AI status) */
 export const getMapOverlay = async () => {
-  const [threats, zones] = await Promise.all([
-    getReportsForMap(),
-    getSafeZonesForMap(),
-  ]);
-  return { threats, safeZones: zones };
+  try {
+    const { data: threats, error: tErr } = await supabase
+      .from('reports')
+      .select('*')
+      // Only show AI-Approved reports on the public map
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+
+    const { data: safeZones, error: sErr } = await supabase
+      .from('safe_zones')
+      .select('*');
+
+    if (tErr || sErr) throw (tErr || sErr);
+
+    return {
+      threats: (threats || []).map(t => ({
+        ...t,
+        latitude: t.lat,
+        longitude: t.lng,
+      })),
+      safeZones: (safeZones || []).map(z => ({
+        ...z,
+        latitude: z.lat,
+        longitude: z.lng,
+      }))
+    };
+  } catch (err) {
+    console.error('[DB] Cloud Fetch Error:', err.message);
+    return { threats: [], safeZones: [] };
+  }
 };
 
-// ─── Emergency Logs ───
-export const logEmergency = async (triggerType, latitude, longitude) => {
-  const id = nextLogId++;
-  emergencyLogs.push({
-    id,
-    trigger_type: triggerType,
-    latitude: latitude || 23.0225,
-    longitude: longitude || 72.5714,
-    status: 'triggered',
-    created_at: new Date().toISOString(),
-  });
-  console.log(`[Guardian DB] Emergency logged: ${triggerType}`);
-  return id;
+/** Dashboard Logic: Pulls all reports for the Priority Poll */
+export const getAllReports = async () => {
+  const { threats } = await getMapOverlay();
+  return threats;
 };
+
+/** Upvote logic for the Dashboard Poll */
+export const upvoteReport = async (id) => {
+  const { data: current } = await supabase.from('reports').select('upvotes').eq('id', id).single();
+  
+  const { data: updated, error } = await supabase
+    .from('reports')
+    .update({ upvotes: (current?.upvotes || 0) + 1 })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return { ...updated, userUpvoted: true };
+};
+
+export const logEmergency = async (type, lat, lng) => {
+  await supabase.from('emergency_logs').insert([{ trigger_type: type, lat, lng, status: 'triggered' }]);
+};
+
+export const setupDatabase = async () => console.log('[Guardian DB] Cloud Sync + AI Mod Active');
+export const resetDatabase = async () => console.warn('Wipe ignored: Manage Cloud data via Dashboard.');

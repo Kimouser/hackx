@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, Platform } from 'react-native';
+import { Text, Platform, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MapScreen from '../screens/MapScreen';
 import ReportScreen from '../screens/ReportScreen';
@@ -11,7 +11,7 @@ const Tab = createBottomTabNavigator();
 const TabNavigator = () => {
   return (
     <Tab.Navigator
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
@@ -26,7 +26,15 @@ const TabNavigator = () => {
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.safe,
         headerTitleStyle: { fontWeight: '700' },
-      }}
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            style={{ marginRight: 16, padding: 8 }}
+          >
+            <Text style={{ fontSize: 24 }}>👤</Text>
+          </TouchableOpacity>
+        ),
+      })}
     >
       <Tab.Screen
         name="SafeMap"

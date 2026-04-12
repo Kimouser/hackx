@@ -24,6 +24,9 @@ export default {
     web: {
       bundler: 'metro',
     },
+    extra: {
+      geminiApiKey: 'AIzaSyANFBUiRSg8GY-yQYgvqlMnWa-D7Yl6w5c',
+    },
     plugins: ['expo-location'],
   },
 };

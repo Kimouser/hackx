@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ScrollView, KeyboardAvoidingView, Platform,
+  Alert, ScrollView, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import colors from '../theme/colors';
 import { createReport } from '../db/database';
 import { sendMunicipalEmail } from '../services/municipalService';
@@ -29,8 +30,10 @@ const ReportScreen = ({ navigation }) => {
   const [category, setCategory] = useState('');
   const [severity, setSeverity] = useState('medium');
   const [submitting, setSubmitting] = useState(false);
+  const [photoUri, setPhotoUri] = useState(null);
 
   const handleSubmit = async () => {
+    console.log('[ReportScreen] Submit pressed');
     if (!title.trim()) {
       Alert.alert('Missing Info', 'Please enter a title for the report.');
       return;
@@ -42,6 +45,7 @@ const ReportScreen = ({ navigation }) => {
 
     setSubmitting(true);
     try {
+      console.log('[ReportScreen] Creating report with:', { title, description, category, severity, photoUri });
       const reportId = await createReport({
         title: title.trim(),
         description: description.trim(),
@@ -49,7 +53,10 @@ const ReportScreen = ({ navigation }) => {
         severity,
         latitude: AHMEDABAD.latitude + (Math.random() - 0.5) * 0.02,
         longitude: AHMEDABAD.longitude + (Math.random() - 0.5) * 0.02,
+        imageUri: photoUri,
       });
+
+      console.log('[ReportScreen] Report created with ID:', reportId);
 
       // Mock Municipal Loop — log the "email" to console
       await sendMunicipalEmail({
@@ -66,7 +73,10 @@ const ReportScreen = ({ navigation }) => {
       Alert.alert(
         '✓ Report Submitted',
         'Your report has been saved locally and the Municipal Loop has been notified.\n\nThe community can now upvote this on the Dashboard.',
-        [{ text: 'View on Dashboard', onPress: () => navigation.navigate('Dashboard') }]
+        [{ text: 'View on Dashboard', onPress: () => {
+          console.log('[ReportScreen] Navigating to Dashboard');
+          navigation.navigate('Dashboard');
+        }}]
       );
 
       // Reset form
@@ -74,10 +84,55 @@ const ReportScreen = ({ navigation }) => {
       setDescription('');
       setCategory('');
       setSeverity('medium');
+      setPhotoUri(null);
     } catch (error) {
+      console.error('[ReportScreen] Submit error:', error);
       Alert.alert('Error', 'Failed to submit report: ' + error.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleAddPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera roll permission is required to add photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setPhotoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick photo: ' + error.message);
+    }
+  };
+
+  const pickPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        setPhotoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to capture photo: ' + error.message);
     }
   };
 
@@ -114,6 +169,24 @@ const ReportScreen = ({ navigation }) => {
           numberOfLines={4}
           textAlignVertical="top"
         />
+
+        {/* Photo Capture */}
+        <Text style={styles.label}>Photo Evidence</Text>
+        <View style={styles.photoContainer}>
+          {photoUri ? (
+            <>
+              <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+              <TouchableOpacity style={styles.removePhotoBtn} onPress={() => setPhotoUri(null)}>
+                <Text style={styles.removePhotoText}>✕ Remove Photo</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.photoBtn} onPress={handleAddPhoto}>
+              <Text style={styles.photoBtnIcon}>📸</Text>
+              <Text style={styles.photoBtnText}>Add Photo</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Category */}
         <Text style={styles.label}>Category *</Text>
@@ -162,9 +235,10 @@ const ReportScreen = ({ navigation }) => {
 
         {/* Submit */}
         <TouchableOpacity
-          style={[styles.submitBtn, submitting && { opacity: 0.5 }]}
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
           onPress={handleSubmit}
           disabled={submitting}
+          activeOpacity={submitting ? 1 : 0.7}
         >
           <Text style={styles.submitText}>
             {submitting ? 'Submitting...' : '📢 Submit Report'}
@@ -215,7 +289,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.safe, borderRadius: 12,
     padding: 16, alignItems: 'center', marginTop: 20,
   },
+  submitBtnDisabled: {
+    opacity: 0.6,
+  },
   submitText: { color: colors.bg, fontSize: 16, fontWeight: '700' },
+  photoContainer: { marginTop: 10 },
+  photoBtn: {
+    backgroundColor: colors.safe, borderRadius: 8, padding: 14, alignItems: 'center', justifyContent: 'center',
+  },
+  photoBtnIcon: { fontSize: 24, marginBottom: 4 },
+  photoBtnText: { color: colors.bg, fontSize: 14, fontWeight: '600' },
+  photoPreview: { width: '100%', height: 200, borderRadius: 10, marginBottom: 10 },
+  removePhotoBtn: {
+    backgroundColor: colors.threat, borderRadius: 8, padding: 12, alignItems: 'center',
+  },
+  removePhotoText: { color: colors.bg, fontSize: 13, fontWeight: '600' },
 });
 
 export default ReportScreen;
