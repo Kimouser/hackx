@@ -3,9 +3,7 @@ import Constants from 'expo-constants';
 const appExtra = Constants.manifest?.extra || Constants.expoConfig?.extra || {};
 const GEMINI_API_KEY = appExtra.geminiApiKey || process.env.GEMINI_API_KEY || '';
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
-const DEFAULT_MODEL = 'gemini-pro';
-
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 const extractJson = (text) => {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');

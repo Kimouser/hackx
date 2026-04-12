@@ -79,7 +79,7 @@ const MapScreen = () => {
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
 
-  const [userLocation, setUserLocation] = useState({ lat: 19.0730, lng: 72.8995 }); 
+  const userLocName, setUserLocName = useState('HELLO HACKATHON');
   const [mapCenter, setMapCenter] = useState({ lat: 19.0730, lng: 72.8995 });
   const [userLocName, setUserLocName] = useState('Mumbai, MH');
   
