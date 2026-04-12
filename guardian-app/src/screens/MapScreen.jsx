@@ -1,6 +1,6 @@
 /**
  * MapScreen.jsx – Project Guardian
- * STATUS: Fixed Syntax + Supabase Integrated + Weighted A* Enabled
+ * FIXED: Blue Dot Restored + Safe Zone Demo Fallback Included
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -16,6 +16,17 @@ import { calculateSafePath } from '../services/navigationService';
 import { PanicButton, useSOS, SOS_STATE } from '../modules/emergency';
 import { ICON_COLORS, safeZoneIcon, THREAT_ICON, CURRENT_LOCATION_ICON } from '../modules/map/MapIcons';
 
+// --- HACKATHON FALLBACK DATA ---
+// If the Supabase safe_zones table is empty, we use these for the demo.
+const DEMO_SAFE_ZONES = [
+  { id: 'sz1', category: 'hospital', latitude: 19.075983, longitude: 72.898875, title: 'Somaiya Hospital' },
+  { id: 'sz2', category: 'police', latitude: 19.079234, longitude: 72.897354, title: 'Vidyavihar Police Station' },
+  { id: 'sz3', category: 'hospital', latitude: 19.083456, longitude: 72.901122, title: 'Rajawadi Hospital' },
+  { id: 'sz4', category: 'police', latitude: 19.086555, longitude: 72.908444, title: 'Ghatkopar Police Station' },
+  { id: 'sz5', category: 'hospital', latitude: 19.062200, longitude: 72.901200, title: 'Zen Multi Speciality Hospital' },
+  { id: 'sz6', category: 'police', latitude: 19.065500, longitude: 72.888500, title: 'Kurla Police Station' }
+];
+
 const C = {
   bg: '#080810', panel: 'rgba(14,14,26,0.95)', panelBorder: '#1e1e35',
   surface: '#13131f', purple: '#7c4dff', purpleBright: '#a07dff',
@@ -26,7 +37,6 @@ const C = {
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTRIBUTION = '&copy; <a href="https://carto.com/">CARTO</a>';
 
-// --- Internal Helper Components ---
 const LegendRow = ({ icon, label, sub }) => (
   <View style={styles.legendItem}>
     {Platform.OS === 'web' ? (
@@ -48,20 +58,17 @@ function LayerToggle({ label, icon, active, color, onPress }) { const dotColor =
 const SIDEBAR_W = 220;
 
 const MapScreen = () => {
-  // Data State
   const [threats, setThreats] = useState([]);
   const [safeZones, setSafeZones] = useState([]);
   const [safePaths, setSafePaths] = useState([]); 
   const [loading, setLoading] = useState(true);
   
-  // UI State
   const [showPaths, setShowPaths] = useState(true);
   const [showThreats, setShowThreats] = useState(true);
   const [showSafeZones, setShowSafeZones] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showLegend, setShowLegend] = useState(false); 
   
-  // Animation & Search
   const sidebarAnim = useRef(new Animated.Value(1)).current;
   const { sosState } = useSOS();
   const isSOSActive = sosState !== SOS_STATE.IDLE;
@@ -71,7 +78,6 @@ const MapScreen = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceTimeout = useRef(null);
 
-  // Map Focus
   const [mapCenter, setMapCenter] = useState({ lat: 19.0730, lng: 72.8995 });
   const [userLocation, setUserLocation] = useState({ lat: 19.0730, lng: 72.8995 });
   const [userLocName, setUserLocName] = useState('Mumbai, MH');
@@ -82,17 +88,18 @@ const MapScreen = () => {
     setSidebarOpen(p => !p);
   }, [sidebarOpen, sidebarAnim]);
 
-  // Load Data from Supabase and calculate initial path
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getMapOverlay();
       setThreats(data.threats || []);
-      setSafeZones(data.safeZones || []);
       
-      // Calculate initial demo path: Vidyavihar Station to Somaiya Campus
-      if (data.threats) {
-        const path = calculateSafePath([19.0798, 72.8988], [19.0730, 72.8995], data.threats);
+      // Inject Demo Safe Zones if Database is empty
+      const loadedSafeZones = data.safeZones?.length > 0 ? data.safeZones : DEMO_SAFE_ZONES;
+      setSafeZones(loadedSafeZones);
+      
+      if (data.threats && data.threats.length > 0) {
+        const path = await calculateSafePath([19.0798, 72.8988], [19.0730, 72.8995], data.threats);
         setSafePaths([{ coords: path }]);
       }
     } catch (err) { 
@@ -136,7 +143,7 @@ const MapScreen = () => {
     }, 500);
   };
 
-  const handleSelectSuggestion = (item) => {
+  const handleSelectSuggestion = async (item) => {
     Keyboard.dismiss();
     setShowSuggestions(false);
     const lat = parseFloat(item.lat);
@@ -144,8 +151,7 @@ const MapScreen = () => {
     setSearchQuery(item.display_name.split(',')[0]); 
     setMapCenter({ lat, lng });
 
-    // Recalculate A* Safe Path from current user position to new search destination
-    const newPath = calculateSafePath([userLocation.lat, userLocation.lng], [lat, lng], threats);
+    const newPath = await calculateSafePath([userLocation.lat, userLocation.lng], [lat, lng], threats);
     setSafePaths([{ coords: newPath }]);
   };
 
@@ -164,16 +170,22 @@ const MapScreen = () => {
     <View style={styles.root}>
       <LeafletMap
         center={mapCenter}
-        zoom={15}
+        zoom={14} 
+        
+        // --- 🔵 THE BLUE DOT PROPS ---
+        userLocation={userLocation}
+        userIcon={CURRENT_LOCATION_ICON}
+        // -----------------------------
+
         threats={showThreats ? threats.map(t => ({ ...t, svgHtml: THREAT_ICON(ICON_COLORS.threat) })) : []}
-        safeZones={showSafeZones ? safeZones.map(z => ({ ...z, svgHtml: safeZoneIcon(z.category, ICON_COLORS.safe) })) : []}
+        // Ensure we check for category or type for the icon mapping
+        safeZones={showSafeZones ? safeZones.map(z => ({ ...z, svgHtml: safeZoneIcon(z.category || z.type, ICON_COLORS.safe) })) : []}
         safePaths={showPaths ? safePaths : []} 
         tileUrl={TILE_URL}
         tileAttribution={TILE_ATTRIBUTION}
         pathColor={C.purple}
       />
 
-      {/* Solid Top Legend Bar */}
       {!isSOSActive && (
         <View style={styles.legendBar}>
           <View style={styles.searchWrapper}>
@@ -221,7 +233,6 @@ const MapScreen = () => {
         </View>
       )}
 
-      {/* Sliding Sidebar */}
       {!isSOSActive && (
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: panelTranslate }] }]}>
           <ScrollView contentContainerStyle={styles.sidebarContent}>
@@ -229,9 +240,15 @@ const MapScreen = () => {
               <View style={styles.locDot} />
               <View><Text style={styles.locLabel}>MY LOCATION</Text><Text style={styles.locName}>{userLocName}</Text></View>
             </TouchableOpacity>
+            
+            {/* Added Refresh Button for live crawler updates */}
+            <TouchableOpacity style={{ marginTop: -5, paddingVertical: 5 }} onPress={loadData}>
+               <Text style={{ color: C.purpleBright, fontSize: 10, fontWeight: '700' }}>🔄 REFRESH LIVE DATA</Text>
+            </TouchableOpacity>
+
             <View style={styles.divider} />
             <View style={styles.scoreRow}>
-              <ScoreRing score={threats.length < 5 ? 82 : 45} />
+              <ScoreRing score={threats.length < 5 ? 82 : Math.max(10, 100 - threats.length)} />
               <View style={styles.statsGrid}>
                 <StatTile icon="⚠️" value={threats.length} label="THREATS" />
                 <StatTile icon="🛡️" value={safeZones.length} label="SAFE" accent />
@@ -246,7 +263,6 @@ const MapScreen = () => {
         </Animated.View>
       )}
 
-      {/* Floating Chevron */}
       {!isSOSActive && (
         <Animated.View style={[styles.chevronWrap, { transform: [{ translateX: sidebarAnim.interpolate({ inputRange: [0, 1], outputRange: [0, SIDEBAR_W] }) }] }]}>
           <TouchableOpacity onPress={toggleSidebar} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -255,7 +271,6 @@ const MapScreen = () => {
         </Animated.View>
       )}
 
-      {/* Emergency Overlays */}
       {isSOSActive ? <View style={styles.sosOverlay}><PanicButton /></View> : <View style={styles.sosFloat}><PanicButton /></View>}
     </View>
   );
