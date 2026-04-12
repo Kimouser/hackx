@@ -1,375 +1,93 @@
-/**
- * ============================================================
- *  GUARDIAN BRACELET — ESP32 BLE Firmware
- *  Project Guardian — AI-Powered Safe-Passage
- * ============================================================
- *
- *  Hardware:   ESP32 DevKit V1 (or any ESP32 with BLE)
- *  Function:   Wearable SOS bracelet that creates a WiFi Access Point
- *              and serves HTTP endpoints for the Guardian app to poll SOS status.
- *
- *  WIRING:
- *    GPIO 4  → Tactile push button → GND  (SOS trigger)
- *    GPIO 2  → Built-in LED (status indicator)
- *    GPIO 15 → External RED LED → 220 ohm → GND (SOS active)
- *    GPIO 13 → External GREEN LED → 220 ohm → GND (BLE connected)
- *    GPIO 12 → Vibration motor module signal pin (haptic feedback)
- *    GPIO 21 → OLED SDA
- *    GPIO 22 → OLED SCL
- *    3.3V    → OLED VCC
- *    GND     → OLED GND
- *
- *  WIFI ACCESS POINT:
- *    SSID:         "Guardian-Bracelet"
- *    Password:     "12345678"
- *    IP:           192.168.4.1
- *    Endpoints:
- *      GET /         - Status page
- *      GET /status   - JSON: {"sos":true/false}
- *      GET /sos      - Trigger SOS manually (for testing)
- *
- *  BUTTON BEHAVIOR:
- *    Single press:    Trigger SOS
- *    Double press:    Cancel SOS
- *
- *  LED PATTERNS:
- *    Green solid:       WiFi AP active
- *    Red solid:         SOS active
- *    All off:           Deep sleep (low power)
- *
- *  JUDGE NOTE:
- *    SOS signals logged to Serial at 115200 baud:
- *    "HARDWARE_SIGNAL: SOS Received at uptime <seconds>"
- *
- * ============================================================
- */
-
-#include <WiFi.h>
-#include <WebServer.h>
 #include <Wire.h>
-#include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
-
-// ════════════════════════════════════════════════════════════════
-// PIN DEFINITIONS
-// ════════════════════════════════════════════════════════════════
-
-#define SOS_BUTTON_PIN   32    // Tactile button → GND (INPUT_PULLUP)
-#define LED_BUILTIN_PIN   2    // ESP32 onboard blue LED
-#define LED_RED_PIN       15   // External red LED (SOS active)
-#define LED_GREEN_PIN     13   // External green LED (BLE connected)
-#define VIBRATION_PIN     4   // Vibration motor signal
-#define OLED_SDA          21   // OLED I2C SDA
-#define OLED_SCL          22   // OLED I2C SCL
+#include <Adafruit_SSD1306.h>
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+#define BUTTON_PIN 32   // Change to your actual button pin
+#define LED_PIN 2       // D2
+#define HAPTIC_PIN 4    // D4
 
-// WiFi credentials
-const char* ssid = "Guardian-Bracelet";
-const char* password = "12345678";
-
-WebServer server(80);
-
-// ════════════════════════════════════════════════════════════════
-// TIMING CONSTANTS
-// ════════════════════════════════════════════════════════════════
-
-#define DEBOUNCE_MS          50     // Button debounce
-#define DOUBLE_TAP_WINDOW_MS 400    // Max gap between presses for double press
-#define HAPTIC_PULSE_MS      200    // Vibration duration per pulse
-#define BLINK_INTERVAL_MS    500    // LED blink rate
-
-// ════════════════════════════════════════════════════════════════
-// GLOBAL STATE
-// ════════════════════════════════════════════════════════════════
-
+unsigned long lastButtonPress = 0;
+int pressCount = 0;
 bool sosActive = false;
-bool sosTriggered = false;  // Flag for app to poll
-
-// Button state machine
-volatile bool     buttonPressed     = false;
-unsigned long     buttonDownTime    = 0;
-unsigned long     lastReleaseTime   = 0;
-int               tapCount          = 0;
-
-// LED blink state
-unsigned long     lastBlinkTime     = 0;
-bool              blinkState        = false;
-
-// Uptime counter (acts as timestamp for judge logs)
-unsigned long     bootTime          = 0;
-
-// ════════════════════════════════════════════════════════════════
-// FORWARD DECLARATIONS
-// ════════════════════════════════════════════════════════════════
-void hapticPulse(int count);
-void updateOLED();
-
-// ════════════════════════════════════════════════════════════════
-// WIFI SERVER HANDLERS
-// ════════════════════════════════════════════════════════════════
-
-void handleRoot() {
-  String html = "<html><body><h1>Guardian Bracelet</h1><p>Status: ";
-  html += sosActive ? "SOS ACTIVE" : "IDLE";
-  html += "</p></body></html>";
-  server.send(200, "text/html", html);
-}
-
-void handleStatus() {
-  String json = "{\"sos\":";
-  json += sosTriggered ? "true" : "false";
-  json += "}";
-  server.send(200, "application/json", json);
-  if (sosTriggered) {
-    sosTriggered = false;  // Reset after app reads
-  }
-}
-
-void handleSOS() {
-  sosActive = true;
-  sosTriggered = true;
-  digitalWrite(LED_RED_PIN, HIGH);
-  hapticPulse(2);
-  updateOLED();
-  server.send(200, "text/plain", "SOS Triggered");
-  Serial.println("[WiFi] SOS triggered via HTTP");
-}
-
-// ════════════════════════════════════════════════════════════════
-// HAPTIC FEEDBACK
-// ════════════════════════════════════════════════════════════════
-
-void hapticPulse(int count) {
-  for (int i = 0; i < count; i++) {
-    digitalWrite(VIBRATION_PIN, HIGH);
-    delay(HAPTIC_PULSE_MS);
-    digitalWrite(VIBRATION_PIN, LOW);
-    if (i < count - 1) delay(HAPTIC_PULSE_MS);  // Gap between pulses
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// OLED DISPLAY UPDATE
-// ════════════════════════════════════════════════════════════════
-
-void updateOLED() {
-  display.clearDisplay();
-  display.setTextSize(3);  // Bigger text
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0,0);
-
-  if (sosActive) {
-    display.println("SOS!");
-    display.setTextSize(1);
-    display.println("Emergency triggered");
-  } else {
-    display.setTextSize(2);
-    display.println("GUARDIAN");
-    display.setTextSize(1);
-    display.println("WiFi AP Active");
-    display.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
-  }
-
-  display.display();
-}
-
-/**
- * Trigger SOS signal.
- * @param type  "SOS" or "SOS_CANCEL"
- */
-void sendSOS(const char* type) {
-  // ── Judge-friendly serial log ──
-  Serial.println("════════════════════════════════════════");
-  Serial.print("HARDWARE_SIGNAL: ");
-  Serial.print(type);
-  Serial.print(" Received at uptime ");
-  Serial.print((millis() - bootTime) / 1000);
-  Serial.println(" seconds");
-  Serial.println("════════════════════════════════════════");
-
-  // ── Visual + haptic feedback ──
-  if (strcmp(type, "SOS") == 0) {
-    sosActive = true;
-    sosTriggered = true;
-    digitalWrite(LED_RED_PIN, HIGH);
-    hapticPulse(2);  // Two pulses = SOS sent
-    updateOLED();
-  }
-  else if (strcmp(type, "SOS_CANCEL") == 0) {
-    sosActive = false;
-    sosTriggered = false;
-    digitalWrite(LED_RED_PIN, LOW);
-    hapticPulse(1);
-    updateOLED();
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// BUTTON HANDLER (debounced, supports single/long/double-tap)
-// ════════════════════════════════════════════════════════════════
-
-void handleButton() {
-  bool currentState = digitalRead(SOS_BUTTON_PIN) == LOW;  // Active LOW (pullup)
-  unsigned long now = millis();
-
-  if (currentState && !buttonPressed) {
-    // ── BUTTON DOWN ──
-    buttonPressed = true;
-    buttonDownTime = now;
-    Serial.println("[Button] Button pressed");
-  }
-
-  if (!currentState && buttonPressed) {
-    // ── BUTTON UP ──
-    buttonPressed = false;
-    unsigned long pressDuration = now - buttonDownTime;
-    Serial.print("[Button] Button released, duration: ");
-    Serial.println(pressDuration);
-
-    if (pressDuration < DEBOUNCE_MS) {
-      // Too short — noise
-      Serial.println("[Button] Ignored (too short)");
-      return;
-    }
-
-    // Valid press
-    tapCount++;
-    Serial.print("[Button] Tap count: ");
-    Serial.println(tapCount);
-
-    if (tapCount == 1) {
-      lastReleaseTime = now;
-    }
-  }
-
-  // ── Process taps after double-tap window expires ──
-  if (tapCount > 0 && !buttonPressed && (now - lastReleaseTime > DOUBLE_TAP_WINDOW_MS)) {
-    Serial.print("[Button] Processing taps: ");
-    Serial.println(tapCount);
-    if (tapCount >= 2) {
-      // Double press = cancel SOS
-      Serial.println("[Button] DOUBLE PRESS detected → SOS_CANCEL");
-      sendSOS("SOS_CANCEL");
-    } else {
-      // Single press = SOS
-      Serial.println("[Button] SINGLE PRESS detected → SOS");
-      sendSOS("SOS");
-    }
-    tapCount = 0;
-  }
-}
-
-// ════════════════════════════════════════════════════════════════
-// LED MANAGEMENT
-// ════════════════════════════════════════════════════════════════
-
-void updateLEDs() {
-  // ── Green LED: WiFi status ──
-  digitalWrite(LED_GREEN_PIN, HIGH);  // Solid = WiFi AP active
-
-  // ── Red LED: SOS status ──
-  digitalWrite(LED_RED_PIN, sosActive ? HIGH : LOW);
-
-  // ── Built-in LED mirrors SOS state ──
-  digitalWrite(LED_BUILTIN_PIN, sosActive ? HIGH : LOW);
-}
-
-// ════════════════════════════════════════════════════════════════
-// BATTERY SIMULATION (disabled)
-// ════════════════════════════════════════════════════════════════
-
-// void updateBattery() {
-//   // Disabled for demo stability
-// }
-
-// ════════════════════════════════════════════════════════════════
-// SETUP
-// ════════════════════════════════════════════════════════════════
+const unsigned long debounceDelay = 50;  // ms
+const unsigned long multiPressDelay = 400; // ms for double press
 
 void setup() {
-  Serial.begin(115200);
-  bootTime = millis();
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(HAPTIC_PIN, OUTPUT);
 
-  Serial.println();
-  Serial.println("╔══════════════════════════════════════════╗");
-  Serial.println("║   GUARDIAN BRACELET — ESP32 WiFi v1.0    ║");
-  Serial.println("║   Project Guardian — Safe-Passage        ║");
-  Serial.println("╚══════════════════════════════════════════╝");
-  Serial.println();
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(HAPTIC_PIN, LOW);
 
-  // ── Pin Setup ──
-  pinMode(SOS_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(LED_BUILTIN_PIN, OUTPUT);
-  pinMode(LED_RED_PIN, OUTPUT);
-  pinMode(LED_GREEN_PIN, OUTPUT);
-  pinMode(VIBRATION_PIN, OUTPUT);
-
-  // OLED Setup
-  Wire.begin(OLED_SDA, OLED_SCL);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
-    for(;;);
+    while(1);
   }
   display.clearDisplay();
-  display.setTextSize(1);
+  display.setTextSize(2);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0,0);
-  display.println("Guardian Bracelet");
-  display.println("Initializing...");
+  display.setCursor(0, 0);
+  display.print("Ready");
   display.display();
-
-  // All LEDs off initially
-  digitalWrite(LED_BUILTIN_PIN, LOW);
-  digitalWrite(LED_RED_PIN, LOW);
-  digitalWrite(LED_GREEN_PIN, LOW);
-  digitalWrite(VIBRATION_PIN, LOW);
-
-  // ── Initialize WiFi ──
-  Serial.println("[WiFi] Starting Access Point...");
-  WiFi.softAP(ssid, password);
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("[WiFi] AP IP address: ");
-  Serial.println(IP);
-
-  // Setup web server routes
-  server.on("/", handleRoot);
-  server.on("/status", handleStatus);
-  server.on("/sos", handleSOS);
-  server.begin();
-  Serial.println("[WiFi] HTTP server started");
-
-  // Startup haptic + LED confirmation
-  hapticPulse(1);
-  digitalWrite(LED_GREEN_PIN, HIGH);
-  delay(500);
-  digitalWrite(LED_GREEN_PIN, LOW);
 }
 
-// ════════════════════════════════════════════════════════════════
-// MAIN LOOP
-// ════════════════════════════════════════════════════════════════
-
 void loop() {
-  // 1. Process physical SOS button
-  handleButton();
+  static bool buttonState = HIGH;
+  static bool lastButtonState = HIGH;
+  int reading = digitalRead(BUTTON_PIN);
 
-  // 2. Update LED indicators
-  updateLEDs();
-
-  // 3. Handle HTTP server clients
-  server.handleClient();
-
-  // 4. Update OLED display periodically
-  static unsigned long lastOLEDUpdate = 0;
-  if (millis() - lastOLEDUpdate > 2000) {  // Update every 2 seconds
-    updateOLED();
-    lastOLEDUpdate = millis();
+  // simple debounce
+  if (reading != lastButtonState) {
+    delay(debounceDelay);
   }
 
-  // Small delay to prevent watchdog issues
-  delay(10);
+  if (reading == LOW && lastButtonState == HIGH) {
+    // button pressed
+    unsigned long now = millis();
+    if (now - lastButtonPress > multiPressDelay) {
+      pressCount = 1;
+    } else {
+      pressCount++;
+    }
+    lastButtonPress = now;
+  }
+
+  // Check for single vs double press after delay
+  if (pressCount > 0 && millis() - lastButtonPress > multiPressDelay) {
+    if (pressCount == 1) {
+      sosActive = true;
+      showMessage("SOS Active");
+    } else if (pressCount == 2) {
+      sosActive = false;
+      showMessage("SOS Cancel");
+    }
+    pressCount = 0;
+  }
+
+  lastButtonState = reading;
+}
+
+void showMessage(const char* msg) {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print(msg);
+  display.display();
+
+  // LED and Haptic feedback
+  if (sosActive) {
+    digitalWrite(LED_PIN, HIGH);
+  } else {
+    digitalWrite(LED_PIN, LOW);
+  }
+
+  // Quick haptic pulse
+  digitalWrite(HAPTIC_PIN, HIGH);
+  delay(50);
+  digitalWrite(HAPTIC_PIN, LOW);
 }
