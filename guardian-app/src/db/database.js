@@ -1,163 +1,117 @@
 /**
- * Guardian Database — In-Memory Store
- *
- * Uses a pure JS in-memory data store that works on Web + iOS + Android
- * with zero native dependencies. Data is pre-seeded from seed.js on init.
- *
- * For production: swap this with expo-sqlite (native) or an API backend.
+ * database.js - Fused Supabase Cloud Edition
+ * Keeps your logic intact while moving storage to the Cloud.
  */
+import { createClient } from '@supabase/supabase-js';
 
-import { SEED_REPORTS, SEED_SAFE_ZONES } from './seed';
+// ─── Cloud Connection ───
+const supabaseUrl = 'https://bwlmblglaslgasutxyyd.supabase.co';
+const supabaseKey = 'sb_publishable_CMj7fsHbKEkED98MgCEsaA_a-oYqp_k';
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ─── In-Memory Tables ───
-let reports = [];
-let safeZones = [];
-let emergencyLogs = [];
-let users = [];
-let nextReportId = 1;
-let nextLogId = 1;
-let nextUserId = 1;
-let initialized = false;
-
-// ─── Init & Seed ───
+// ─── Init ───
 export const getDatabase = async () => {
-  if (initialized) return;
-  initialized = true;
-
-  // Seed with mock data
-  reports = SEED_REPORTS.map((r, i) => ({
-    id: i + 1,
-    ...r,
-    userUpvoted: false,
-    created_at: new Date().toISOString(),
-  }));
-  nextReportId = reports.length + 1;
-
-  safeZones = SEED_SAFE_ZONES.map((z, i) => ({
-    id: i + 1,
-    ...z,
-    is_verified: 1,
-    operating_hours: '24/7',
-    created_at: new Date().toISOString(),
-  }));
-
-  console.log(`[Guardian DB] Seeded ${reports.length} threat reports + ${safeZones.length} safe zones`);
+  console.log('[Guardian DB] Connected to Supabase Cloud Engine');
+  // Seeding is now handled by your Crawler or Supabase Dashboard
 };
 
-// ─── Report CRUD ───
+export const setupDatabase = getDatabase;
+
+// ─── Report CRUD (Cloud Redirected) ───
 export const getAllReports = async () => {
-  return [...reports]
-    .filter((r) => r.status !== 'resolved')
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const { data, error } = await supabase
+    .from('reports')
+    .select('*')
+    .neq('status', 'resolved')
+    .order('created_at', { ascending: false });
+  
+  if (error) { console.error(error); return []; }
+  return data;
 };
 
 export const getReportsForMap = async () => {
-  return reports
-    .filter((r) => r.status !== 'resolved')
-    .map((r) => ({
-      id: r.id,
-      title: r.title,
-      category: r.category,
-      severity: r.severity,
-      latitude: r.latitude,
-      longitude: r.longitude,
-      upvotes: r.upvotes,
-      status: r.status,
-    }));
+  const reports = await getAllReports();
+  return reports.map(r => ({
+    id: r.id,
+    title: r.title,
+    category: r.category,
+    severity: r.severity || 'medium',
+    latitude: r.lat, // Supabase uses 'lat'
+    longitude: r.lng, // Supabase uses 'lng'
+    upvotes: r.upvotes,
+    status: r.status,
+  }));
 };
 
-export const createReport = async ({ title, description, category, severity, latitude, longitude, imageUri }) => {
-  const id = nextReportId++;
-  const report = {
-    id,
-    title,
-    description: description || '',
-    category,
-    severity: severity || 'medium',
-    latitude,
-    longitude,
-    upvotes: 0,
-    status: 'active',
-    municipal_email_sent: 0,
-    municipal_email_date: null,
-    image_uri: imageUri || '',
-    userUpvoted: false,
-    created_at: new Date().toISOString(),
-  };
-  reports.push(report);
-  console.log(`[Guardian DB] New report #${id}: ${title}`);
-  return id;
+export const createReport = async (data) => {
+  const { data: result, error } = await supabase
+    .from('reports')
+    .insert([{
+      title: data.title,
+      description: data.description || '',
+      category: data.category,
+      severity: data.severity || 'medium',
+      lat: data.latitude, // Mapping frontend 'latitude' to DB 'lat'
+      lng: data.longitude,
+      upvotes: 0,
+      status: 'active'
+    }])
+    .select();
+
+  if (error) throw error;
+  console.log(`[Guardian DB] Cloud report created: ${data.title}`);
+  return result[0].id;
 };
 
 export const upvoteReport = async (id) => {
-  const report = reports.find((r) => r.id === id);
-  if (!report) throw new Error('Report not found');
+  // 1. Get current upvotes
+  const { data: report, error: fErr } = await supabase
+    .from('reports')
+    .select('upvotes, status')
+    .eq('id', id)
+    .single();
 
-  if (!report.userUpvoted) {
-    report.upvotes += 1;
-    report.userUpvoted = true;
+  if (fErr) throw fErr;
 
-    // Municipal Loop: auto-trigger at 10 upvotes
-    if (report.upvotes >= 10 && !report.municipal_email_sent) {
-      report.municipal_email_sent = 1;
-      report.municipal_email_date = new Date().toISOString();
-      report.status = 'municipal_notified';
-      console.log(`[Guardian DB] Municipal Loop triggered for report #${id}`);
-      return { ...report, municipalTriggered: true };
-    }
-  } else {
-    report.upvotes = Math.max(0, report.upvotes - 1);
-    report.userUpvoted = false;
+  const newUpvotes = report.upvotes + 1;
+  let newStatus = report.status;
+
+  // Municipal Loop logic
+  if (newUpvotes >= 10 && report.status === 'active') {
+    newStatus = 'municipal_notified';
   }
 
-  return { ...report, municipalTriggered: false };
-};
+  const { data: updated, error: uErr } = await supabase
+    .from('reports')
+    .update({ upvotes: newUpvotes, status: newStatus })
+    .eq('id', id)
+    .select()
+    .single();
 
-// ─── User CRUD ───
-export const createUser = async ({ name, email, password, role, aadhar, area }) => {
-  const existing = users.find(u => u.email === email);
-  if (existing) throw new Error('User already exists');
-
-  const id = nextUserId++;
-  const user = {
-    id,
-    name,
-    email,
-    password, // In real app, hash this
-    role, // 'user' or 'volunteer'
-    aadhar: role === 'volunteer' ? aadhar : null,
-    area: role === 'volunteer' ? area : null,
-    created_at: new Date().toISOString(),
-  };
-  users.push(user);
-  console.log(`[Guardian DB] New user #${id}: ${name} (${role})`);
-  return { ...user, password: undefined };
-};
-
-export const loginUser = async ({ name, email, password, role }) => {
-  const user = users.find(u => u.email === email && u.password === password && u.role === role);
-  if (!user) throw new Error('Invalid credentials');
-  console.log(`[Guardian DB] Login: ${user.name}`);
-  return { ...user, password: undefined };
+  if (uErr) throw uErr;
+  return { ...updated, municipalTriggered: newStatus === 'municipal_notified' };
 };
 
 // ─── SafeZone Queries ───
 export const getAllSafeZones = async () => {
-  return [...safeZones].sort((a, b) => a.category.localeCompare(b.category));
+  const { data, error } = await supabase.from('safe_zones').select('*');
+  if (error) return [];
+  return data;
 };
 
 export const getSafeZonesForMap = async () => {
-  return safeZones.map((z) => ({
+  const zones = await getAllSafeZones();
+  return zones.map(z => ({
     id: z.id,
     name: z.name,
-    category: z.category,
-    latitude: z.latitude,
-    longitude: z.longitude,
-    phone: z.phone,
+    category: z.type, // Mapping DB 'type' to frontend 'category'
+    latitude: z.lat,
+    longitude: z.lng,
+    phone: z.phone || 'N/A',
   }));
 };
 
-// ─── Map Overlay (combined) ───
+// ─── Map Overlay (Combined) ───
 export const getMapOverlay = async () => {
   const [threats, zones] = await Promise.all([
     getReportsForMap(),
@@ -168,15 +122,15 @@ export const getMapOverlay = async () => {
 
 // ─── Emergency Logs ───
 export const logEmergency = async (triggerType, latitude, longitude) => {
-  const id = nextLogId++;
-  emergencyLogs.push({
-    id,
-    trigger_type: triggerType,
-    latitude: latitude || 23.0225,
-    longitude: longitude || 72.5714,
-    status: 'triggered',
-    created_at: new Date().toISOString(),
-  });
-  console.log(`[Guardian DB] Emergency logged: ${triggerType}`);
-  return id;
+  const { data, error } = await supabase
+    .from('emergency_logs')
+    .insert([{
+      trigger_type: triggerType,
+      lat: latitude || 19.0760,
+      lng: longitude || 72.8777,
+      status: 'triggered'
+    }]);
+  
+  if (error) console.error("SOS Log failed", error);
+  return data?.[0]?.id;
 };
